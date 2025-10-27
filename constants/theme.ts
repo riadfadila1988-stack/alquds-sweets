@@ -16,6 +16,9 @@ export const Colors = {
     icon: '#687076',
     tabIconDefault: '#687076',
     tabIconSelected: tintColorLight,
+    danger: '#FF3B30',
+    success: '#d4edda', // light green background for success
+    warning: '#fff8c4', // light yellow background for warning
   },
   dark: {
     text: '#ECEDEE',
@@ -24,6 +27,9 @@ export const Colors = {
     icon: '#9BA1A6',
     tabIconDefault: '#9BA1A6',
     tabIconSelected: tintColorDark,
+    danger: '#FF6B6B',
+    success: '#2e7d32', // darker green for dark mode
+    warning: '#b08900', // darker amber for dark mode
   },
 };
 
@@ -51,3 +57,5 @@ export const Fonts = Platform.select({
     mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
   },
 });
+
+
