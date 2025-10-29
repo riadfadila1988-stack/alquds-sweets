@@ -18,8 +18,8 @@
         "backgroundImage": "./assets/images/logo.jpg",
         "monochromeImage": "./assets/images/logo.jpg"
       },
+      "softwareKeyboardLayoutMode": "pan",
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
       "package": "com.riadfadila.expotemplatedefault"
     },
     "web": {

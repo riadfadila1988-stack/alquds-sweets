@@ -1,14 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   Alert,
   ActivityIndicator,
+  I18nManager,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { addUser } from '@/services/user';
 import { useTranslation } from './_i18n';
 import Header from './components/header';
@@ -22,8 +27,11 @@ interface UserForm {
   active: boolean;
 }
 
+const isRTL = I18nManager.isRTL;
+
 export default function AddUserScreen() {
   const { t } = useTranslation();
+  const scrollRef = useRef<any>(null);
   const [formData, setFormData] = useState<UserForm>({
     name: '',
     idNumber: '',
@@ -123,138 +131,142 @@ export default function AddUserScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-      <Header title={t('addNewUser') || 'Add New User'} />
-      <View style={{ paddingHorizontal: 20 }}>
-        <Text style={styles.subtitle}>{t('addUserSubtitle')}</Text>
-      </View>
-
-      <View style={styles.form}>
-        {/* Name Input */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>{`${t('name')} *`}</Text>
-          <TextInput
-            style={[styles.input, errors.name && styles.inputError]}
-            value={formData.name}
-            onChangeText={(text) => updateField('name', text)}
-            placeholder={t('enterUserName')}
-            placeholderTextColor="#999"
-            textAlign="right"
-          />
-          {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
-        </View>
-
-        {/* ID Number Input */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>{`${t('idNumber')} *`}</Text>
-          <TextInput
-            style={[styles.input, errors.idNumber && styles.inputError]}
-            value={formData.idNumber}
-            onChangeText={(text) => updateField('idNumber', text)}
-            placeholder={t('enterIdNumber')}
-            placeholderTextColor="#999"
-            textAlign="right"
-            autoCapitalize="none"
-          />
-          {errors.idNumber && <Text style={styles.errorText}>{errors.idNumber}</Text>}
-        </View>
-
-        {/* Password Input */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>{`${t('password')} *`}</Text>
-          <TextInput
-            style={[styles.input, errors.password && styles.inputError]}
-            value={formData.password}
-            onChangeText={(text) => updateField('password', text)}
-            placeholder={t('enterPassword')}
-            placeholderTextColor="#999"
-            textAlign="right"
-            secureTextEntry
-            autoCapitalize="none"
-          />
-          {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
-        </View>
-
-        {/* Confirm Password Input */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>{`${t('confirmPassword')} *`}</Text>
-          <TextInput
-            style={[styles.input, errors.confirmPassword && styles.inputError]}
-            value={formData.confirmPassword}
-            onChangeText={(text) => updateField('confirmPassword', text)}
-            placeholder={t('reEnterPassword')}
-            placeholderTextColor="#999"
-            textAlign="right"
-            secureTextEntry
-            autoCapitalize="none"
-          />
-          {errors.confirmPassword && (
-            <Text style={styles.errorText}>{errors.confirmPassword}</Text>
-          )}
-        </View>
-
-        {/* Role Selection */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>{`${t('role')} *`}</Text>
-          <View style={styles.roleContainer}>
-            <TouchableOpacity
-              style={[
-                styles.roleButton,
-                formData.role === 'employee' && styles.roleButtonActive,
-              ]}
-              onPress={() => updateField('role', 'employee')}
-            >
-              <Text
-                style={[
-                  styles.roleButtonText,
-                  formData.role === 'employee' && styles.roleButtonTextActive,
-                ]}
-              >
-                {t('employee')}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.roleButton,
-                formData.role === 'admin' && styles.roleButtonActive,
-              ]}
-              onPress={() => updateField('role', 'admin')}
-            >
-              <Text
-                style={[
-                  styles.roleButtonText,
-                  formData.role === 'admin' && styles.roleButtonTextActive,
-                ]}
-              >
-                {t('admin')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Active Status */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.switchDescription}>
-            {formData.active
-              ? t('userCanLoginImmediately')
-              : t('userCannotLogin') }
-          </Text>
-        </View>
-
-        {/* Submit Button */}
-        <TouchableOpacity
-          style={[styles.submitButton, loading && styles.submitButtonDisabled]}
-          onPress={handleSubmit}
-          disabled={loading}
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
+        <KeyboardAwareScrollView
+          innerRef={(r) => (scrollRef.current = r)}
+          style={styles.container}
+          contentContainerStyle={[styles.contentContainer, { flexGrow: 1 }]}
+          enableOnAndroid
+          extraScrollHeight={Platform.OS === 'ios' ? 80 : 60}
+          keyboardShouldPersistTaps="handled"
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.submitButtonText}>{t('addUser')}</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+          <View style={{ flex: 1 }}>
+            <Header title={t('addNewUser') || 'Add New User'} />
+            <View style={{ paddingHorizontal: 20 }}>
+              <Text style={styles.subtitle}>{t('addUserSubtitle')}</Text>
+            </View>
+
+            <View style={styles.form}>
+              {/* Name Input */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>{`${t('name')} *`}</Text>
+                <TextInput
+                  style={[styles.input, errors.name && styles.inputError]}
+                  value={formData.name}
+                  onChangeText={(text) => updateField('name', text)}
+                  placeholder={t('enterUserName')}
+                  placeholderTextColor="#999"
+                  textAlign={isRTL ? 'right' : 'left'}
+                />
+                {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
+              </View>
+
+              {/* ID Number Input */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>{`${t('idNumber')} *`}</Text>
+                <TextInput
+                  style={[styles.input, errors.idNumber && styles.inputError]}
+                  value={formData.idNumber}
+                  onChangeText={(text) => updateField('idNumber', text)}
+                  placeholder={t('enterIdNumber')}
+                  placeholderTextColor="#999"
+                  textAlign={isRTL ? 'right' : 'left'}
+                  autoCapitalize="none"
+                />
+                {errors.idNumber && <Text style={styles.errorText}>{errors.idNumber}</Text>}
+              </View>
+
+              {/* Password Input */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>{`${t('password')} *`}</Text>
+                <TextInput
+                  style={[styles.input, errors.password && styles.inputError]}
+                  value={formData.password}
+                  onChangeText={(text) => updateField('password', text)}
+                  placeholder={t('enterPassword')}
+                  placeholderTextColor="#999"
+                  textAlign={isRTL ? 'right' : 'left'}
+                  secureTextEntry
+                  autoCapitalize="none"
+                />
+                {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
+              </View>
+
+              {/* Confirm Password Input */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>{`${t('confirmPassword')} *`}</Text>
+                <TextInput
+                  style={[styles.input, errors.confirmPassword && styles.inputError]}
+                  value={formData.confirmPassword}
+                  onChangeText={(text) => updateField('confirmPassword', text)}
+                  placeholder={t('reEnterPassword')}
+                  placeholderTextColor="#999"
+                  textAlign={isRTL ? 'right' : 'left'}
+                  secureTextEntry
+                  autoCapitalize="none"
+                />
+                {errors.confirmPassword && (
+                  <Text style={styles.errorText}>{errors.confirmPassword}</Text>
+                )}
+              </View>
+
+              {/* Role Selection */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>{`${t('role')} *`}</Text>
+                <View style={styles.roleContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.roleButton,
+                      formData.role === 'employee' && styles.roleButtonActive,
+                    ]}
+                    onPress={() => updateField('role', 'employee')}
+                  >
+                    <Text
+                      style={[
+                        styles.roleButtonText,
+                        formData.role === 'employee' && styles.roleButtonTextActive,
+                      ]}
+                    >
+                      {t('employee')}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.roleButton,
+                      formData.role === 'admin' && styles.roleButtonActive,
+                    ]}
+                    onPress={() => updateField('role', 'admin')}
+                  >
+                    <Text
+                      style={[
+                        styles.roleButtonText,
+                        formData.role === 'admin' && styles.roleButtonTextActive,
+                      ]}
+                    >
+                      {t('admin')}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Submit Button */}
+              <TouchableOpacity
+                style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+                onPress={handleSubmit}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.submitButtonText}>{t('addUser')}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAwareScrollView>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -280,6 +292,7 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: '#6b7280',
+    textAlign: isRTL ? 'right' : 'left',
   },
   form: {
     backgroundColor: '#fff',
@@ -299,7 +312,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#374151',
     marginBottom: 8,
-    textAlign: 'right',
+    textAlign: isRTL ? 'right' : 'left',
   },
   input: {
     backgroundColor: '#f9fafb',
@@ -317,10 +330,10 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     fontSize: 14,
     marginTop: 4,
-    textAlign: 'right',
+    textAlign: isRTL ? 'right' : 'left',
   },
   roleContainer: {
-    flexDirection: 'row-reverse',
+    flexDirection: isRTL ? 'row-reverse' : 'row',
     gap: 12,
   },
   roleButton: {
@@ -344,7 +357,7 @@ const styles = StyleSheet.create({
     color: '#3b82f6',
   },
   switchContainer: {
-    flexDirection: 'row-reverse',
+    flexDirection: isRTL ? 'row-reverse' : 'row',
     alignItems: 'center',
     gap: 12,
   },
@@ -357,7 +370,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6b7280',
     marginTop: 4,
-    textAlign: 'right',
+    textAlign: isRTL ? 'right' : 'left',
   },
   submitButton: {
     backgroundColor: '#3b82f6',

@@ -1,14 +1,14 @@
 import React from 'react';
 import {View, Text, StyleSheet, TouchableOpacity, ScrollView} from 'react-native';
 import {useTranslation} from './_i18n';
-import { Link } from 'expo-router';
+import {Link} from 'expo-router';
 import Header from './components/header';
 
 export default function EmployeeScreen() {
     const {t} = useTranslation();
     return (
         <View style={styles.screen}>
-            <Header title={t('employeeDashboard') || 'Employee'} showBack={false} />
+            <Header title={t('employeeDashboard') || 'Employee'} showBack={false}/>
 
             <ScrollView contentContainerStyle={styles.container}>
                 <View style={styles.menu}>
@@ -22,6 +22,12 @@ export default function EmployeeScreen() {
                     <Link href="/today-tasks" asChild>
                         <TouchableOpacity style={styles.menuItem}>
                             <Text style={styles.menuText}>{t('todayTasks') || "Today's Tasks"}</Text>
+                        </TouchableOpacity>
+                    </Link>
+
+                    <Link href="/update-material-quantity" asChild>
+                        <TouchableOpacity style={styles.menuItem}>
+                            <Text style={styles.menuText}>{t('updateMaterialsQuantity') || "Today's Tasks"}</Text>
                         </TouchableOpacity>
                     </Link>
 
@@ -65,7 +71,7 @@ const styles = StyleSheet.create({
         marginBottom: 15,
         elevation: 2,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
+        shadowOffset: {width: 0, height: 2},
         shadowOpacity: 0.1,
         shadowRadius: 4,
         width: '100%',

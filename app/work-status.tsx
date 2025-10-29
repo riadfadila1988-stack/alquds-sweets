@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Pressable, I18nManager } from 'react-native';
 import Header from './components/header';
 import { useWorkDayPlan } from '@/hooks/use-work-day-plan';
 import { getHistory as getAttendanceHistory } from '@/services/employee-attendance';
@@ -16,36 +16,6 @@ function formatDurationMinutes(minutes: number | undefined) {
   const hours = Math.floor(m / 60);
   const mins = m % 60;
   return `${hours}h ${mins}m`;
-}
-
-function DebugPlan({ plan, sessionsMap, usersMap, textColor }: any) {
-  if (!plan && !sessionsMap && !usersMap) return null;
-
-  return (
-    <View style={{ marginTop: 16, padding: 10, backgroundColor: '#f9f9f9', borderRadius: 8 }}>
-      <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8, color: textColor }}>{'Debug Info'}</Text>
-      {plan ? (
-        <View style={{ marginBottom: 8 }}>
-          <Text style={{ fontWeight: '700', color: textColor }}>{'Plan:'}</Text>
-          <Text style={{ fontSize: 12, color: textColor }}>{JSON.stringify(plan, null, 2)}</Text>
-        </View>
-      ) : null}
-
-      {sessionsMap ? (
-        <View style={{ marginBottom: 8 }}>
-          <Text style={{ fontWeight: '700', color: textColor }}>{'Open Attendance Sessions:'}</Text>
-          <Text style={{ fontSize: 12, color: textColor }}>{JSON.stringify(sessionsMap, null, 2)}</Text>
-        </View>
-      ) : null}
-
-      {usersMap ? (
-        <View>
-          <Text style={{ fontWeight: '700', color: textColor }}>{'Users Map:'}</Text>
-          <Text style={{ fontSize: 12, color: textColor }}>{JSON.stringify(Object.keys(usersMap).slice(0,50), null, 2)}</Text>
-        </View>
-      ) : null}
-    </View>
-  );
 }
 
 // Helper: normalize common task fields to support different backend shapes
@@ -111,7 +81,7 @@ export default function WorkStatusScreen() {
   const textColor = useThemeColor({}, 'text');
 
   // RTL support
-  const isRTL = true;
+  const isRTL = I18nManager.isRTL;
   const rtlText: any = { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' };
 
   // theme colors used to compute task card backgrounds/badges (similar to TodayTasks screen)
@@ -369,9 +339,6 @@ export default function WorkStatusScreen() {
       {activeEntries.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={[styles.emptyText, { color: textColor }]}>{t('noOneWorking') || 'No employees are currently working on tasks.'}</Text>
-          {plan || Object.keys(currentSessionsMap).length > 0 || Object.keys(usersMap).length > 0 ? (
-            <DebugPlan plan={plan} sessionsMap={currentSessionsMap} usersMap={usersMap} textColor={textColor} />
-          ) : null}
         </View>
       ) : (
         activeEntries.map((e, idx) => {

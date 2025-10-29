@@ -10,6 +10,7 @@ const resources = {
     employeesHoursTitle: 'ساعات الموظفين الشهرية',
     prevMonth: 'الشهر السابق',
     nextMonth: 'الشهر التالي',
+    selectMonth: 'اختر الشهر',
     noEmployeesData: 'لا توجد بيانات موظفين',
     // New labels for employees hours row
     worked: 'عمل',
@@ -25,6 +26,12 @@ const resources = {
     selectUnit: 'اختر الوحدة',
     selectMaterial: 'اختر مادة',
     searchMaterials: 'ابحث عن المواد',
+    // Added translations for update-material-quantity screen
+    updateMaterialsQuantity: 'تحديث كميات المواد',
+    accessDenied: 'تم رفض الوصول. يقتصر الوصول على الموظفين.',
+    invalidQuantity: 'الكمية غير صالحة',
+    failedToSave: 'فشل في حفظ الكمية',
+    saved: 'تم الحفظ',
     cancel: 'إلغاء',
     add: 'إضافة',
     nameRequired: 'الاسم مطلوب',
@@ -102,6 +109,16 @@ const resources = {
     addUser: 'إضافة مستخدم',
     addNewUser: 'إضافة مستخدم جديد',
     addUserSubtitle: 'قم بملء البيانات التالية لإنشاء حساب مستخدم',
+    // Password change labels/messages
+    newPassword: 'كلمة مرور جديدة',
+    passwordHelp: 'اتركه فارغًا للحفاظ على كلمة المرور الحالية. الحد الأدنى 6 أحرف.',
+    passwordMinLength: 'يجب أن تكون كلمة المرور 6 أحرف على الأقل',
+    passwordsDoNotMatch: 'كلمتا المرور غير متطابقتين',
+    // Users list / management
+    manageUsers: 'إدارة المستخدمين',
+    edit: 'تعديل',
+    userListSubtitle: 'عرض وإدارة المستخدمين',
+    editUser: 'تعديل المستخدم',
     // Placeholders and messages used by add-user.tsx
     enterUserName: 'أدخل الاسم',
     enterIdNumber: 'أدخل رقم الهوية',
@@ -165,6 +182,8 @@ const resources = {
     notificationFailed: 'فشل إرسال الإشعار',
     failedToSaveTaskTimes: 'فشل في حفظ أوقات المهام',
     planSaved: 'تم حفظ الخطة',
+    noResults: 'لا توجد نتائج',
+    clear: 'إغلاقي',
   },
   en: {
     // Common
@@ -173,6 +192,7 @@ const resources = {
     employeesHoursTitle: 'Monthly Employee Hours',
     prevMonth: 'Previous Month',
     nextMonth: 'Next Month',
+    selectMonth: 'Select month',
     noEmployeesData: 'No employee data available',
     // New labels for employees hours row
     worked: 'Worked',
@@ -188,6 +208,12 @@ const resources = {
     selectUnit: 'Select Unit',
     selectMaterial: 'Select material',
     searchMaterials: 'Search materials...',
+    // Added translations for update-material-quantity screen
+    updateMaterialsQuantity: 'Update Materials Quantity',
+    accessDenied: 'Access denied. Employees only.',
+    invalidQuantity: 'Invalid quantity',
+    failedToSave: 'Failed to save quantity',
+    saved: 'Saved',
     cancel: 'Cancel',
     add: 'Add',
     nameRequired: 'Name is required',
@@ -265,6 +291,16 @@ const resources = {
     addUser: 'Add User',
     addNewUser: 'Add New User',
     addUserSubtitle: 'Fill in the following data to create a user account',
+    // Password change labels/messages
+    newPassword: 'New password',
+    passwordHelp: 'Leave blank to keep the current password. Minimum 6 characters.',
+    passwordMinLength: 'Password must be at least 6 characters',
+    passwordsDoNotMatch: 'Passwords do not match',
+    // Users list / management
+    manageUsers: 'Manage Users',
+    edit: 'Edit',
+    userListSubtitle: 'View and manage users',
+    editUser: 'Edit User',
     // Placeholders and messages used by add-user.tsx
     enterUserName: 'Enter name',
     enterIdNumber: 'Enter ID number',
@@ -328,6 +364,8 @@ const resources = {
     notificationFailed: 'Notification failed',
     failedToSaveTaskTimes: 'Failed to save task times',
     planSaved: 'Plan saved',
+    noResults: 'No results',
+    clear: 'Clear',
   }
 };
 

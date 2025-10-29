@@ -1,5 +1,6 @@
-import React, {useMemo, useState} from 'react';
-import {View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, Platform, Alert} from 'react-native';
+import React, {useMemo, useState, useRef, useEffect} from 'react';
+import {View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, Platform, Alert, I18nManager, KeyboardAvoidingView, Keyboard, LayoutAnimation, UIManager} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Header from './components/header';
 import {useUsers} from '@/hooks/use-users';
 import {useTaskGroups} from '@/hooks/use-task-groups';
@@ -15,41 +16,46 @@ import {useMaterials} from '@/hooks/use-materials';
 
 export default function PlanWorkDayScreen() {
     const {t} = useTranslation();
+    // refs to manage scroll offset restoration when keyboard hides
+    const flatListRef = useRef<FlatList<any> | null>(null);
+    const prevOffsetRef = useRef<number>(0);
+    useEffect(() => {
+        const onHide = () => {
+            setTimeout(() => {
+                try {
+                    if (flatListRef.current) {
+                        flatListRef.current.scrollToOffset({ offset: prevOffsetRef.current || 0, animated: true });
+                    }
+                } catch { }
+            }, 50);
+        };
+        const sub = Keyboard.addListener('keyboardDidHide', onHide);
+        return () => sub.remove();
+    }, []);
     const backgroundColor = useThemeColor({}, 'background');
     const textColor = useThemeColor({}, 'text');
 
-    // detect RTL from react-native's I18nManager
-    const isRTL = true;
+    // detect RTL from react-native's I18nManager; for web also respect document.dir
+    const isRTL = (() => {
+        try {
+            if (I18nManager.isRTL) return true;
+            if (Platform.OS === 'web' && typeof document !== 'undefined') {
+                const dir = document.documentElement.getAttribute('dir');
+                return dir === 'rtl';
+            }
+        } catch {
+            // ignore
+        }
+        return false;
+    })();
 
     // load materials so we can copy full material objects (with names) when
     // copying tasks from a task group into an assignment. If materials are not
     // loaded yet we'll fall back to preserving the id value.
     const {materials} = useMaterials();
 
-    // Try to load DraggableFlatList at runtime on native platforms using
-    // a dynamic import so we don't statically require it on web (which can
-    // break due to native-only deps like react-native-reanimated).
-    const [DraggableModule, setDraggableModule] = React.useState<any | null>(null);
-    // Temporarily disable draggable behavior in this screen because native draggable
-    // implementations can intercept touch gestures and prevent TextInput from receiving focus.
-    // Set to `true` to re-enable dragging if you need it and it doesn't block inputs.
-    const enableDraggable = false;
-    React.useEffect(() => {
-        let cancelled = false;
-        if (Platform.OS === 'web') return;
-        (async () => {
-            try {
-                const mod = (await import('react-native-draggable-flatlist')).default;
-                if (cancelled) return;
-                setDraggableModule(mod);
-            } catch (err: any) {
-                console.error('Failed to dynamically import react-native-draggable-flatlist:', err);
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, []);
+    // We use explicit arrow-buttons for reordering across all platforms.
+    // No native draggable module is used.
 
     const {users: allUsers} = useUsers();
     const {taskGroups} = useTaskGroups();
@@ -97,6 +103,17 @@ export default function PlanWorkDayScreen() {
         if (plan && plan.assignments) return plan.assignments.map((a: any) => ({...a}));
         return [];
     });
+
+    // Brief visual highlight for the task that was just moved. We store the
+    // destination index and user id so the UI can flash that row.
+    const [movedItem, setMovedItem] = useState<{userId: string, index: number} | null>(null);
+
+    // Enable LayoutAnimation on Android (experimental flag)
+    useEffect(() => {
+        if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+            try { UIManager.setLayoutAnimationEnabledExperimental(true); } catch { /* ignore */ }
+        }
+    }, []);
 
     // Track which assignment (by user id) is currently expanded. Only one may be open at a time.
     const [openAssignmentUser, setOpenAssignmentUser] = useState<string | null>(null);
@@ -178,7 +195,7 @@ export default function PlanWorkDayScreen() {
     const toggleUser = (user: any) => {
         const exists = assignments.find(a => String(a.user._id || a.user) === String(user._id));
         if (exists) {
-            setAssignments(assignments.filter(a => String(a.user._id || a.user) !== String(user._id)));
+            setAssignments(assignments.filter((a: any) => String(a.user._id || a.user) !== String(user._id)));
         } else {
             setAssignments([...assignments, {user: user._id || user, tasks: []}]);
         }
@@ -244,6 +261,13 @@ export default function PlanWorkDayScreen() {
     // Helper to move a task within the tasks array for a user
     const moveTask = (userId: string, from: number, to: number) => {
         if (from === to) return;
+        // Use LayoutAnimation for a smooth reorder transition
+        try {
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        } catch {
+            // no-op if LayoutAnimation isn't available for some platform/version
+        }
+
         setAssignments(prev => prev.map((a: any) => {
             if (String(a.user._id || a.user) === String(userId)) {
                 const tasks = [...(a.tasks || [])];
@@ -254,6 +278,11 @@ export default function PlanWorkDayScreen() {
             }
             return a;
         }));
+
+        // Flash the moved row at its destination index
+        const uid = String(userId);
+        setMovedItem({userId: uid, index: to});
+        setTimeout(() => setMovedItem(null), 400);
     };
 
     const handleSave = async () => {
@@ -290,7 +319,7 @@ export default function PlanWorkDayScreen() {
                         return Number.isFinite(nq) ? nq : 0;
                     })(),
                 })),
-            })),
+            }))
         }));
 
         // Debug: print the payload we are about to save so you can inspect
@@ -329,14 +358,14 @@ export default function PlanWorkDayScreen() {
     // icon names should follow logical action (prev/next) but flip visually
     // in RTL via container direction. We still choose icon direction so arrows
     // point the way the user expects.
-    const prevIconName = isRTL ? 'chevron-right' : 'chevron-left';
-    const nextIconName = isRTL ? 'chevron-left' : 'chevron-right';
+    const prevIconName = isRTL ? 'chevron-right' : 'chevron-right';
+    const nextIconName = isRTL ? 'chevron-left' : 'chevron-left';
 
     // Render header (everything above the assignments list)
     const renderHeader = () => (
         <>
             <Header title={t('planWorkDay') || 'Plan Work Day'} />
-            <View style={[styles.dateRow, {flexDirection: isRTL ? 'row-reverse' : 'row'}]}>
+            <View style={[styles.dateRow, {flexDirection: 'row'}]}>
 
                 <TouchableOpacity onPress={prevDay} style={styles.arrowBtn}
                                   accessibilityLabel={t('previousDay') || 'Previous day'}>
@@ -448,78 +477,41 @@ export default function PlanWorkDayScreen() {
                             </View>
                         </View>
 
-                        {/* Draggable list for tasks so user can reorder by long-press + drag */}
-                        {DraggableModule && enableDraggable ? (
-                            <DraggableModule
-                                data={(a.tasks || [])}
-                                keyExtractor={(item: any, index: number) => item && item._id ? String(item._id) : `t-${index}`}
-                                onDragEnd={(params: { data: any[] }) => {
-                                    const {data} = params;
-                                    setAssignments(prev => prev.map((pa: any) => {
-                                        if (String(pa.user._id || pa.user) === String(a.user._id || a.user)) {
-                                            return {...pa, tasks: data};
-                                        }
-                                        return pa;
-                                    }));
-                                }}
-                                nestedScrollEnabled
-                                renderItem={({item, index, drag, isActive}: any) => (
-                                    <View style={{
-                                        flexDirection: isRTL ? 'row-reverse' : 'row',
-                                        alignItems: 'flex-start',
-                                        opacity: isActive ? 0.9 : 1
-                                    }}>
-                                        <TouchableOpacity onLongPress={drag} style={{padding: 8, marginRight: 6}}>
-                                            <MaterialIcons name="drag-handle" size={20} color="#666"/>
-                                        </TouchableOpacity>
-                                        <View style={{flex: 1}} pointerEvents="box-none">
-                                            <Task
-                                                task={item}
-                                                onChange={(newTask) => updateTask(a.user._id || a.user, index, newTask)}
-                                                onRemove={() => removeTask(a.user._id || a.user, index)}
-                                                index={index}
-                                            />
-                                        </View>
-                                    </View>
-                                )}
-                            />
-                        ) : (
-                            // Non-draggable fallback (web or failed module load).
-                            // Render tasks with simple Up/Down buttons so users can reorder.
-                            (a.tasks || []).map((t: any, ti: number) => (
-                                <View key={ti} style={{flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center'}}>
-                                    <View style={{width: 40, alignItems: 'center'}}>
-                                        <TouchableOpacity disabled={ti === 0}
-                                                          onPress={() => moveTask(a.user._id || a.user, ti, ti - 1)}
-                                                          style={[styles.smallBtn, {
-                                                              paddingVertical: 6,
-                                                              paddingHorizontal: 8,
-                                                              opacity: ti === 0 ? 0.4 : 1
-                                                          }]}>
-                                            <Text style={{color: 'white'}}>↑</Text>
-                                        </TouchableOpacity>
-                                        <View style={{height: 6}}/>
-                                        <TouchableOpacity disabled={ti === (a.tasks || []).length - 1}
-                                                          onPress={() => moveTask(a.user._id || a.user, ti, ti + 1)}
-                                                          style={[styles.smallBtn, {
-                                                              paddingVertical: 6,
-                                                              paddingHorizontal: 8,
-                                                              opacity: ti === (a.tasks || []).length - 1 ? 0.4 : 1
-                                                          }]}>
-                                            <Text style={{color: 'white'}}>↓</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                    <View style={{flex: 1}} pointerEvents="box-none">
-                                        <Task
-                                            task={t}
-                                            onChange={(newTask) => updateTask(a.user._id || a.user, ti, newTask)}
-                                            onRemove={() => removeTask(a.user._id || a.user, ti)}
-                                            index={ti}
-                                        />
-                                    </View>
+                        {/* Render tasks with Up/Down arrow buttons for reordering on all platforms */}
+                        {(a.tasks || []).map((task: any, ti: number) => (
+                            // If this task was just moved, briefly highlight it
+                            <View key={ti} style={[{flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center'},
+                                movedItem && movedItem.userId === String(a.user._id || a.user) && movedItem.index === ti ? {backgroundColor: '#e6f7ff', borderRadius: 6, paddingVertical: 4} : {}
+                            ]}>
+                                <View style={{width: 40, alignItems: 'center'}}>
+                                    <TouchableOpacity
+                                        accessibilityLabel={t('moveUp') || 'Move task up'}
+                                        disabled={ti === 0}
+                                        onPress={() => moveTask(a.user._id || a.user, ti, ti - 1)}
+                                        style={[styles.arrowControlBtn, {opacity: ti === 0 ? 0.4 : 1}]}
+                                    >
+                                        <Text style={{color: 'white', fontSize: 16}}>↑</Text>
+                                    </TouchableOpacity>
+                                    <View style={{height: 6}}/>
+                                    <TouchableOpacity
+                                        accessibilityLabel={t('moveDown') || 'Move task down'}
+                                        disabled={ti === (a.tasks || []).length - 1}
+                                        onPress={() => moveTask(a.user._id || a.user, ti, ti + 1)}
+                                        style={[styles.arrowControlBtn, {opacity: ti === (a.tasks || []).length - 1 ? 0.4 : 1}]}
+                                    >
+                                        <Text style={{color: 'white', fontSize: 16}}>↓</Text>
+                                    </TouchableOpacity>
                                 </View>
-                            ))
-                        )}
+                                <View style={{flex: 1}} pointerEvents="box-none">
+                                    <Task
+                                        task={task}
+                                        onChange={(newTask) => updateTask(a.user._id || a.user, ti, newTask)}
+                                        onRemove={() => removeTask(a.user._id || a.user, ti)}
+                                        index={ti}
+                                    />
+                                </View>
+                            </View>
+                        ))}
                     </View>
                 )}
             </View>
@@ -527,27 +519,41 @@ export default function PlanWorkDayScreen() {
     };
 
     return (
-        <FlatList
-            data={assignments}
-            keyExtractor={(item) => String(item.user._id || item.user)}
-            ListHeaderComponent={renderHeader}
-            ListEmptyComponent={() => (
-                <Text style={{color: textColor, paddingHorizontal: 16}}>{t('noEmployeesSelected') || 'No employees selected'}</Text>
-            )}
-            renderItem={renderAssignment}
-            // FlatList should fill the available space, contentContainer should size to content
-            style={[styles.fullHeight, {backgroundColor}]}
-            contentContainerStyle={styles.container}
-            keyboardShouldPersistTaps="always"
-            ListFooterComponent={() => (
-                <>
-                    <View style={{height: 20}}/>
-                    <TouchableOpacity style={[styles.saveBtn, {backgroundColor: '#2196F3'}]} onPress={handleSave}>
-                        <Text style={{color: 'white', fontWeight: '600'}}>{t('savePlan') || 'Save Plan'}</Text>
-                    </TouchableOpacity>
-                </>
-            )}
-        />
+        <KeyboardAvoidingView
+            style={{flex: 1}}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 80}
+        >
+            <SafeAreaView style={{flex: 1}} edges={['bottom']}>
+                <FlatList
+                 ref={(r) => { flatListRef.current = r; }}
+                 onScroll={(e) => { prevOffsetRef.current = e.nativeEvent.contentOffset.y; }}
+                 scrollEventThrottle={16}
+                  data={assignments}
+                  keyExtractor={(item) => String(item.user._id || item.user)}
+                  ListHeaderComponent={renderHeader}
+                 ListEmptyComponent={() => (
+                    <Text style={{color: textColor, paddingHorizontal: 16}}>{t('noEmployeesSelected') || 'No employees selected'}</Text>
+                )}
+                 renderItem={renderAssignment}
+                 // FlatList should fill the available space, contentContainer should size to content
+                 style={[styles.fullHeight, {backgroundColor}]}
+                 // writingDirection is not present on some React Native TypeScript defs; cast the inline style to `any`
+                 contentContainerStyle={[styles.container, ({ writingDirection: isRTL ? 'rtl' : 'ltr' } as any)]}
+                 keyboardShouldPersistTaps={'handled'}
+                 keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                 nestedScrollEnabled={true}
+                 ListFooterComponent={() => (
+                     <>
+                        <View style={{height: 8}}/>
+                        <TouchableOpacity style={[styles.saveBtn, {backgroundColor: '#2196F3'}]} onPress={handleSave}>
+                            <Text style={{color: 'white', fontWeight: '600'}}>{t('savePlan') || 'Save Plan'}</Text>
+                        </TouchableOpacity>
+                     </>
+                 )}
+                />
+            </SafeAreaView>
+        </KeyboardAvoidingView>
     );
 }
 
@@ -555,7 +561,7 @@ const styles = StyleSheet.create({
     // content container (no flex) so FlatList can scroll when content is smaller
     container: {
         padding: 16,
-        paddingBottom: 56,
+        paddingBottom: 16,
     },
     // fullHeight used on FlatList to occupy available space
     fullHeight: {
@@ -585,6 +591,15 @@ const styles = StyleSheet.create({
         paddingVertical: 4,
         paddingHorizontal: 8,
         borderRadius: 4,
+    },
+    // Larger touch target for arrow reordering (up/down) buttons
+    arrowControlBtn: {
+        backgroundColor: '#2196F3',
+        paddingVertical: 8,
+        paddingHorizontal: 10,
+        borderRadius: 6,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     togglesContainer: {
         flexWrap: 'wrap',

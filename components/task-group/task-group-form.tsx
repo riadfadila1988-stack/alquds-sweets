@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, Button, ScrollView, TouchableOpacity, I18nManager } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Button, ScrollView, TouchableOpacity, I18nManager, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback } from 'react-native';
 import { ITaskGroup, ITask, IUsedMaterial } from '@/types/task-group';
 import { useTranslation } from '@/app/_i18n';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -14,7 +14,7 @@ interface TaskGroupFormProps {
 export default function TaskGroupForm({ initialData, onSubmit, onClose }: TaskGroupFormProps) {
   const { t } = useTranslation();
   // detect RTL from React Native's I18nManager
-  const isRTL = true;
+  const isRTL = I18nManager.isRTL;
   const [name, setName] = useState(initialData?.name || '');
   const [tasks, setTasks] = useState<Partial<ITask>[]>(initialData?.tasks || []);
 
@@ -64,38 +64,51 @@ export default function TaskGroupForm({ initialData, onSubmit, onClose }: TaskGr
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={[styles.label, isRTL && styles.labelRtl]}>{t('groupName') || 'Group Name'}</Text>
-      <TextInput style={[styles.input, isRTL && styles.inputRtl]} value={name} onChangeText={setName} />
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={[styles.label, isRTL && styles.labelRtl]}>{t('groupName') || 'Group Name'}</Text>
+          <TextInput style={[styles.input, isRTL && styles.inputRtl]} value={name} onChangeText={setName} />
 
-      <View style={[styles.headerRow, isRTL && styles.headerRowRtl]}>
-        <Text style={[styles.label, isRTL && styles.labelRtl]}>{t('tasks') || 'Tasks'}</Text>
-        <TouchableOpacity style={styles.iconButton} onPress={addTask} accessibilityLabel={t('addTask') || 'Add Task'}>
-          {/* Mirror icon in RTL so it visually matches direction */}
-          <MaterialIcons name="add" size={24} color="#007AFF" style={isRTL ? { transform: [{ scaleX: -1 }] } : undefined} />
-        </TouchableOpacity>
-      </View>
+          <View style={[styles.headerRow, isRTL && styles.headerRowRtl]}>
+            <Text style={[styles.label, isRTL && styles.labelRtl]}>{t('tasks') || 'Tasks'}</Text>
+            <TouchableOpacity style={styles.iconButton} onPress={addTask} accessibilityLabel={t('addTask') || 'Add Task'}>
+              {/* Mirror icon in RTL so it visually matches direction */}
+              <MaterialIcons name="add" size={24} color="#007AFF" style={isRTL ? { transform: [{ scaleX: -1 }] } : undefined} />
+            </TouchableOpacity>
+          </View>
 
-      {tasks.map((task, taskIndex) => (
-        <Task
-          key={taskIndex}
-          task={task}
-          onChange={(newTask) => handleTaskChange(taskIndex, newTask)}
-          onRemove={() => removeTask(taskIndex)}
-          index={taskIndex}
-        />
-      ))}
+          {tasks.map((task, taskIndex) => (
+            <Task
+              key={taskIndex}
+              task={task}
+              onChange={(newTask) => handleTaskChange(taskIndex, newTask)}
+              onRemove={() => removeTask(taskIndex)}
+              index={taskIndex}
+            />
+          ))}
 
-      <View style={[styles.buttonContainer, isRTL && styles.buttonContainerRtl]}>
-         <Button title={t('submit') || 'Submit'} onPress={handleSubmit} />
-         <Button title={t('cancel') || 'Cancel'} onPress={onClose} color="red" />
-       </View>
-     </ScrollView>
+          <View style={[styles.buttonContainer, isRTL && styles.buttonContainerRtl]}>
+             <Button  title={t('submit') || 'Submit'} onPress={handleSubmit} />
+             <Button title={t('cancel') || 'Cancel'} onPress={onClose} color="red" />
+           </View>
+         </ScrollView>
+       </TouchableWithoutFeedback>
+     </KeyboardAvoidingView>
    );
  }
 
  const styles = StyleSheet.create({
-   container: { flex: 1, padding: 16 },
+   container: { flex: 1, padding: 16, },
+   // ensure ScrollView content container exists so content can be padded/centered
+   scrollContainer: { flexGrow: 1, paddingBottom: 30 },
    label: { fontSize: 16, fontWeight: '600', marginTop: 12 },
    labelRtl: { textAlign: 'right' },
    input: { borderWidth: 1, borderColor: '#ccc', padding: 8, borderRadius: 4, marginTop: 6 },
@@ -133,7 +146,7 @@ export default function TaskGroupForm({ initialData, onSubmit, onClose }: TaskGr
    clearButtonRtl: { left: undefined, right: -10 },
    clearButtonText: { fontSize: 16, color: '#333' },
    materialContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 8, justifyContent: 'space-between' },
-   buttonContainer: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 24 },
+   buttonContainer: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 24, marginBottom: 30 },
    buttonContainerRtl: { flexDirection: 'row-reverse' },
    materialSelector: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#ddd', padding: 8, borderRadius: 6, width: '40%' },
    materialSelectorText: { flex: 1, color: '#333' },

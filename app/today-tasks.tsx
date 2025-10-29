@@ -17,7 +17,7 @@ const dbg = (...args: any[]) => {
 
 export default function TodayTasksScreen() {
   const { t } = useTranslation();
-  const isRTL = true;
+  const isRTL = I18nManager.isRTL;
 
   // intentionally using plain strings to avoid strict typed translation keys
 
