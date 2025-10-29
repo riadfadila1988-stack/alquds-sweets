@@ -8,7 +8,7 @@ import Header from './components/header';
 
 export default function WorkingHoursScreen() {
   const { t } = useTranslation();
-  const isRTL = true;
+  const isRTL = I18nManager.isRTL;
   const rtlTextAlign: 'left' | 'right' = isRTL ? 'right' : 'left';
   const {
     currentSession,

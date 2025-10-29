@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, View, Text, TextInput, Button, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { Modal, View, Text, TextInput, Button, StyleSheet, ActivityIndicator, TouchableOpacity, I18nManager } from 'react-native';
 import { IMaterial } from '@/types/material';
 import { useTranslation } from '@/app/_i18n';
 
@@ -27,6 +27,8 @@ export default function MaterialForm({
   const [minQuantity, setMinQuantity] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const isRTL = I18nManager.isRTL;
 
   // Populate fields when initialData changes (edit mode)
   React.useEffect(() => {
@@ -106,42 +108,42 @@ export default function MaterialForm({
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} transparent>
       <View style={styles.overlay}>
-        <View style={styles.container}>
-          <Text style={styles.title}>{initialData ? t('editMaterial') : t('addMaterial')}</Text>
-          <Text style={styles.label}>{t('name')}</Text>
-          <TextInput placeholder={t('name')} value={name} onChangeText={setName} style={styles.input} />
+        <View style={[styles.container, isRTL ? styles.containerRTL : styles.containerLTR]}>
+          <Text style={[styles.title, isRTL ? styles.rtlText : styles.ltrText]}>{initialData ? t('editMaterial') : t('addMaterial')}</Text>
+          <Text style={[styles.label, isRTL ? styles.rtlText : styles.ltrText]}>{t('name')}</Text>
+          <TextInput placeholder={t('name')} value={name} onChangeText={setName} style={[styles.input, isRTL ? styles.rtlText : styles.ltrText]} />
 
-          <Text style={styles.label}>{t('quantity')}</Text>
-          <TextInput placeholder={t('quantity')} value={quantity} onChangeText={setQuantity} style={styles.input} keyboardType="numeric" />
+          <Text style={[styles.label, isRTL ? styles.rtlText : styles.ltrText]}>{t('quantity')}</Text>
+          <TextInput placeholder={t('quantity')} value={quantity} onChangeText={setQuantity} style={[styles.input, isRTL ? styles.rtlText : styles.ltrText]} keyboardType="numeric" />
 
-          <Text style={styles.label}>{t('minQuantity')}</Text>
-          <TextInput placeholder={t('minQuantity')} value={minQuantity} onChangeText={setMinQuantity} style={styles.input} keyboardType="numeric" />
+          <Text style={[styles.label, isRTL ? styles.rtlText : styles.ltrText]}>{t('minQuantity')}</Text>
+          <TextInput placeholder={t('minQuantity')} value={minQuantity} onChangeText={setMinQuantity} style={[styles.input, isRTL ? styles.rtlText : styles.ltrText]} keyboardType="numeric" />
 
-          <Text style={styles.label}>{t('hebrewName')}</Text>
-          <TextInput placeholder={t('hebrewName')} value={heName} onChangeText={setHeName} style={styles.input} />
+          <Text style={[styles.label, isRTL ? styles.rtlText : styles.ltrText]}>{t('hebrewName')}</Text>
+          <TextInput placeholder={t('hebrewName')} value={heName} onChangeText={setHeName} style={[styles.input, isRTL ? styles.rtlText : styles.ltrText]} />
 
-          <Text style={styles.label}>{t('cost')}</Text>
-          <TextInput placeholder={t('cost')} value={cost} onChangeText={setCost} style={styles.input} keyboardType="numeric" />
+          <Text style={[styles.label, isRTL ? styles.rtlText : styles.ltrText]}>{t('cost')}</Text>
+          <TextInput placeholder={t('cost')} value={cost} onChangeText={setCost} style={[styles.input, isRTL ? styles.rtlText : styles.ltrText]} keyboardType="numeric" />
 
           {/* Unit selector */}
-          <Text style={styles.label}>{t('selectUnit')}</Text>
+          <Text style={[styles.label, isRTL ? styles.rtlText : styles.ltrText]}>{t('selectUnit')}</Text>
           <TouchableOpacity style={styles.input} onPress={() => setShowUnitPicker((s) => !s)}>
-            <Text style={styles.inputText}>{unit ? (t(('unit_' + unit) as any) ?? unit) : t('selectUnit')}</Text>
+            <Text style={[styles.inputText, isRTL ? styles.rtlText : styles.ltrText]}>{unit ? (t(('unit_' + unit) as any) ?? unit) : t('selectUnit')}</Text>
           </TouchableOpacity>
           {showUnitPicker && (
             <View style={styles.unitList}>
               {UNITS.map((u) => (
-                <TouchableOpacity key={u} style={styles.unitItem} onPress={() => { setUnit(u); setShowUnitPicker(false); }}>
-                  <Text style={styles.unitText}>{t(('unit_' + u) as any) ?? u}</Text>
+                <TouchableOpacity key={u} style={[styles.unitItem, isRTL ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }]} onPress={() => { setUnit(u); setShowUnitPicker(false); }}>
+                  <Text style={[styles.unitText, isRTL ? styles.rtlText : styles.ltrText]}>{t(('unit_' + u) as any) ?? u}</Text>
                  </TouchableOpacity>
               ))}
             </View>
           )}
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {error ? <Text style={[styles.error, isRTL ? styles.rtlText : styles.ltrText]}>{error}</Text> : null}
           {isSubmitting ? (
             <ActivityIndicator size="small" />
           ) : (
-            <View style={styles.buttons}>
+            <View style={[styles.buttons, isRTL ? styles.buttonsRTL : styles.buttonsLTR]}>
               <Button title={t('cancel')} onPress={() => { reset(); onClose(); }} />
               <Button title={initialData ? t('save') : t('add')} onPress={handleSubmit} />
             </View>
@@ -154,16 +156,23 @@ export default function MaterialForm({
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)' },
-  container: { width: '90%', backgroundColor: '#fff', padding: 16, borderRadius: 8, alignItems: 'flex-end' },
-  title: { fontSize: 18, fontWeight: '600', marginBottom: 12, textAlign: 'center', writingDirection: 'rtl' },
-  label: { fontSize: 14, color: '#333', marginBottom: 6, textAlign: 'right', writingDirection: 'rtl' },
+  container: { width: '90%', backgroundColor: '#fff', padding: 16, borderRadius: 8 },
+  containerRTL: { alignItems: 'flex-end' },
+  containerLTR: { alignItems: 'flex-start' },
+  title: { fontSize: 18, fontWeight: '600', marginBottom: 12, textAlign: 'center' },
+  label: { fontSize: 14, color: '#333', marginBottom: 6 },
   // make inputs full width of the modal container
-  input: { width: '100%', borderWidth: 1, borderColor: '#ddd', borderRadius: 6, padding: 10, marginBottom: 8, justifyContent: 'center', textAlign: 'right', writingDirection: 'rtl' },
-  inputText: { textAlign: 'right', writingDirection: 'rtl' },
+  input: { width: '100%', borderWidth: 1, borderColor: '#ddd', borderRadius: 6, padding: 10, marginBottom: 8, justifyContent: 'center' },
+  inputText: { },
   unitList: { width: '100%', backgroundColor: '#fff', borderWidth: 1, borderColor: '#ddd', borderRadius: 6, marginBottom: 8 },
-  unitItem: { padding: 10, alignItems: 'flex-end' },
-  unitText: { fontSize: 16, textAlign: 'right', writingDirection: 'rtl' },
+  unitItem: { padding: 10 },
+  unitText: { fontSize: 16 },
   // make buttons container full width and space the actions to the ends
-  buttons: { flexDirection: 'row-reverse', justifyContent: 'space-between', marginTop: 8, width: '100%' },
-  error: { color: 'red', marginBottom: 8, textAlign: 'right' },
+  buttons: { justifyContent: 'space-between', marginTop: 8, width: '100%' },
+  buttonsRTL: { flexDirection: 'row-reverse' },
+  buttonsLTR: { flexDirection: 'row' },
+  error: { color: 'red', marginBottom: 8 },
+  // RTL/LTR text helpers
+  rtlText: { textAlign: 'right', writingDirection: 'rtl' },
+  ltrText: { textAlign: 'left', writingDirection: 'ltr' },
 });

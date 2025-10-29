@@ -34,9 +34,9 @@ export default function AdminScreen() {
                         <Text style={styles.menuText}>{t('employeesHoursTitle')}</Text>
                     </TouchableOpacity>
                 </Link>
-                <Link href="/add-user" asChild>
+                <Link href="/users" asChild>
                     <TouchableOpacity style={styles.menuItem}>
-                        <Text style={styles.menuText}>{t('addUser')}</Text>
+                        <Text style={styles.menuText}>{t('manageUsers') || 'Manage Users'}</Text>
                     </TouchableOpacity>
                 </Link>
                 <Link href="/materials" asChild>
@@ -63,31 +63,36 @@ export default function AdminScreen() {
             {/* Add admin features here */}
 
             {/* Notifications modal for admins */}
-            <Modal visible={isNotifVisible} animationType="slide" onRequestClose={() => setIsNotifVisible(false)}>
-                <View style={{ flex: 1, padding: 16 }}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text style={{ fontSize: 18, fontWeight: '600' }}>{t('notifications') || 'Notifications'}</Text>
-                        <Button title={t('markAllRead') || 'Mark all read'} onPress={async () => { await markAll(); refetchNotifs(); }} />
-                    </View>
-                    {notifLoading ? (
-                        <ActivityIndicator size="large" />
-                    ) : (
-                        <FlatList
-                            data={notifications}
-                            keyExtractor={(item) => item._id}
-                            renderItem={({ item }) => (
-                                <View style={{ padding: 12, borderBottomWidth: 1, borderColor: '#eee', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={{ fontWeight: item.read ? '400' : '700' }}>{item.message}</Text>
-                                        <Text style={{ color: '#666', marginTop: 6 }}>{new Date(item.createdAt).toLocaleString()}</Text>
+            <Modal visible={isNotifVisible} animationType="slide" transparent onRequestClose={() => setIsNotifVisible(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContainer}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>{t('notifications') || 'Notifications'}</Text>
+                            <Button title={t('markAllRead') || 'Mark all read'} onPress={async () => { await markAll(); refetchNotifs(); }} />
+                        </View>
+                        {notifLoading ? (
+                            <ActivityIndicator size="large" style={{ flex: 1 }} />
+                        ) : (
+                            <FlatList
+                                data={notifications}
+                                keyExtractor={(item) => item._id}
+                                renderItem={({ item }) => (
+                                    <View style={{ padding: 12, borderBottomWidth: 1, borderColor: '#eee', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={{ fontWeight: item.read ? '400' : '700' }}>{item.message}</Text>
+                                            <Text style={{ color: '#666', marginTop: 6 }}>{new Date(item.createdAt).toLocaleString()}</Text>
+                                        </View>
+                                        {!item.read && <Button title={t('markRead') || 'Mark read'} onPress={async () => { await markRead(item._id); refetchNotifs(); }} />}
                                     </View>
-                                    {!item.read && <Button title={t('markRead') || 'Mark read'} onPress={async () => { await markRead(item._id); refetchNotifs(); }} />}
-                                </View>
-                            )}
-                            contentContainerStyle={{ paddingTop: 12 }}
-                        />
-                    )}
-                    <Button title={t('close') || 'Close'} onPress={() => setIsNotifVisible(false)} />
+                                )}
+                                contentContainerStyle={{ paddingTop: 12, paddingBottom: 12 }}
+                                style={{ flex: 1 }}
+                            />
+                        )}
+                        <View style={{ marginTop: 8 }}>
+                            <Button title={t('close') || 'Close'} onPress={() => setIsNotifVisible(false)} />
+                        </View>
+                    </View>
                 </View>
             </Modal>
         </SafeAreaView>
@@ -124,4 +129,8 @@ const styles = StyleSheet.create({
     notifIcon: { fontSize: 20 },
     unreadBadge: { position: 'absolute', top: -6, right: -10, backgroundColor: '#FF3B30', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2 },
     unreadText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center', padding: 16 },
+    modalContainer: { height: '75%', width: '92%', maxWidth: 720, backgroundColor: '#fff', borderRadius: 12, padding: 12, overflow: 'hidden' },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 6, paddingVertical: 8 },
+    modalTitle: { fontSize: 18, fontWeight: '600' },
 });

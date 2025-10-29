@@ -16,11 +16,10 @@ export default function MaterialListItem({ item, onPress, onLongPress }: { item:
   const isRTL = I18nManager.isRTL;
 
   // dynamic styles that depend on RTL
-  // Always render with the side (quantity+badge) on the left and main content (name) on the right
-  const rowStyle = [styles.row, styles.rowReverse];
+  const rowStyle = [styles.row, isRTL ? styles.rowReverse : null];
   const badgeStyle = [styles.badge];
-  const nameTextStyle = [styles.name, styles.textRight];
-  const infoRowStyle = [styles.infoRow];
+  const nameTextStyle = [styles.name, isRTL ? styles.textRight : null];
+  const infoRowStyle = [styles.infoRow, isRTL ? styles.infoRowRTL : null];
 
   // Build the displayed name (always show primary name first, then heName)
   const displayedName = `${item.name}${item.heName ? ' | ' + item.heName : ''}`;
@@ -33,14 +32,14 @@ export default function MaterialListItem({ item, onPress, onLongPress }: { item:
 
         {/* Secondary info row: min quantity, cost, created date */}
         <View style={infoRowStyle}>
-          {minQtyLabel ? <Text style={styles.infoText}>{`${t('minQuantity')}: ${minQtyLabel}`}</Text> : null}
-          {costLabel ? <Text style={styles.infoText}>{`${t('cost')}: ${costLabel}`}</Text> : null}
-          {createdLabel ? <Text style={styles.infoText}>{createdLabel}</Text> : null}
+          {minQtyLabel ? <Text style={[styles.infoText, isRTL ? styles.infoTextRTL : null]}>{`${t('minQuantity')}: ${minQtyLabel}`}</Text> : null}
+          {costLabel ? <Text style={[styles.infoText, isRTL ? styles.infoTextRTL : null]}>{`${t('cost')}: ${costLabel}`}</Text> : null}
+          {createdLabel ? <Text style={[styles.infoText, isRTL ? styles.infoTextRTL : null]}>{createdLabel}</Text> : null}
         </View>
       </View>
 
       {/* Side content: quantity and badge (mirrored when RTL) */}
-      <View style={styles.side}>
+      <View style={[styles.side, isRTL ? styles.sideRTL : null]}>
         {(item.quantity !== undefined || item.unit) && (
           <Text style={[styles.quantity, isRTL ? styles.textRight : null]}>{`${item.quantity ?? ''}${unitLabel ? ' ' + unitLabel : ''}`}</Text>
         )}
@@ -57,16 +56,20 @@ export default function MaterialListItem({ item, onPress, onLongPress }: { item:
 
 const styles = StyleSheet.create({
   row: { padding: 12, backgroundColor: '#fff', borderRadius: 8, marginBottom: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: '#ddd', flexDirection: 'row', alignItems: 'center' },
-  // We reuse rowReverse to place the side container on the left and content on the right
+  // rowReverse places the side container on the left and content on the right
   rowReverse: { flexDirection: 'row-reverse' },
   name: { fontSize: 16, fontWeight: '600' },
   meta: { marginTop: 6, color: '#666' },
   infoRow: { flexDirection: 'row', marginTop: 6, flexWrap: 'wrap' },
+  // when RTL, reverse the info items so they read naturally
+  infoRowRTL: { flexDirection: 'row-reverse' },
   infoText: { color: '#777', marginRight: 12, fontSize: 13 },
+  infoTextRTL: { marginRight: 0, marginLeft: 12 },
   // main content takes remaining space
   content: { flex: 1 },
   // side container for quantity and badge
   side: { justifyContent: 'center', alignItems: 'flex-start', marginRight: 12 },
+  sideRTL: { alignItems: 'flex-end', marginRight: 0, marginLeft: 12 },
   quantity: { fontSize: 16, fontWeight: '600', color: '#333' },
   badge: { backgroundColor: '#FF3B30', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, marginTop: 6 },
   badgeText: { color: '#fff', fontWeight: '700' },

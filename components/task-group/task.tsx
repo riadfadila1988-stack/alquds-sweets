@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, FlatList, Pressable, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, FlatList, Pressable, Platform, I18nManager } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useMaterials } from '@/hooks/use-materials';
 import { IUsedMaterial } from '@/types/task-group';
@@ -14,8 +14,9 @@ interface TaskProps {
 
 export default function Task({ task, onChange, onRemove }: TaskProps) {
   const { t } = useTranslation();
-  const isRTL = true;
+  const isRTL = I18nManager.isRTL;
   const { materials } = useMaterials();
+  const [descHeight, setDescHeight] = React.useState<number>(100);
   // Refs used to force focus when parent touchables/gestures intercept taps
   const nameRef = useRef<any>(null);
   const durationRef = useRef<any>(null);
@@ -147,7 +148,7 @@ export default function Task({ task, onChange, onRemove }: TaskProps) {
         />
         <TextInput
           ref={descRef}
-          style={[styles.input, isRTL && styles.inputRtl]}
+          style={[styles.input, isRTL && styles.inputRtl, styles.textarea, isRTL && styles.textareaRtl, { height: descHeight, textAlignVertical: 'top' }]}
           placeholder={t('description') || 'Description'}
           value={task.description ?? ''}
           onChangeText={(v) => handleFieldChange('description', v)}
@@ -155,6 +156,16 @@ export default function Task({ task, onChange, onRemove }: TaskProps) {
           onPressIn={() => descRef.current?.focus && descRef.current.focus()}
           editable
           selectTextOnFocus
+          multiline={true}
+          numberOfLines={4}
+          blurOnSubmit={false}
+          returnKeyType="default"
+          onContentSizeChange={(e) => {
+            const h = e.nativeEvent.contentSize?.height || 100;
+            // add a small padding so text isn't clipped
+            const newH = Math.max(80, Math.min(300, Math.round(h + 6)));
+            if (newH !== descHeight) setDescHeight(newH);
+          }}
         />
 
         <View style={styles.headerRowSmall}>
@@ -304,7 +315,9 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   input: { borderWidth: 1, borderColor: '#ccc', padding: 8, borderRadius: 4, marginTop: 6 },
+  textarea: { height: 100, paddingTop: 8, paddingBottom: 8, textAlignVertical: 'top' },
   inputRtl: { textAlign: 'right' },
+  textareaRtl: { textAlign: 'right' },
   clearButton: { position: 'absolute', top: -10, left: -10, width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#eee' },
   clearButtonRtl: { left: undefined, right: -10 },
   headerRowSmall: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },

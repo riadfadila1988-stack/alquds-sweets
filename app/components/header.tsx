@@ -3,15 +3,18 @@ import { View, Text, TouchableOpacity, StyleSheet, I18nManager } from 'react-nat
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from '../_i18n';
 
 type HeaderProps = {
   title?: string;
+  titleKey?: string; // optional i18n key to translate
   showBack?: boolean;
   onBack?: () => void;
   right?: React.ReactNode;
 };
 
-export default function Header({ title, showBack = true, onBack, right }: HeaderProps) {
+export default function Header({ title, titleKey, showBack = true, onBack, right }: HeaderProps) {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -28,15 +31,16 @@ export default function Header({ title, showBack = true, onBack, right }: Header
     <View style={[styles.container, { paddingTop: insets.top || 12 }]}>
       <View style={styles.row}>
         {showBack ? (
-          <TouchableOpacity accessibilityRole="button" onPress={handleBack} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={28} color="#007AFF" style={{ transform: [{ scaleX: I18nManager.isRTL ? -1 : 1 }] }} />
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('back') || 'Back'} onPress={handleBack} style={styles.backBtn}>
+            <Ionicons name="chevron-forward" size={28} color="#007AFF" style={{ transform: [{ scaleX: I18nManager.isRTL ? -1 : 1 }] }} />
           </TouchableOpacity>
         ) : (
           <View style={styles.backBtnPlaceholder} />
         )}
 
         <View style={styles.titleWrap}>
-          {title ? <Text numberOfLines={1} style={styles.title}>{title}</Text> : null}
+          {/* Prefer explicit titleKey for translation; fall back to title prop (already translated) */}
+          { (/* @ts-ignore */ titleKey) ? <Text numberOfLines={1} style={styles.title}>{t((titleKey as any) || '')}</Text> : (title ? <Text numberOfLines={1} style={styles.title}>{title}</Text> : null) }
         </View>
 
         <View style={styles.rightWrap}>{right ?? <View style={styles.rightPlaceholder} />}</View>

@@ -37,7 +37,7 @@ export default function EmployeeMonthDetail() {
     <View style={styles.container}>
       <Header title={t('employeeDetailsTitle') || 'Employee details'} />
       {name && (
-        <Text style={[styles.subTitle, isRTL && { textAlign: 'center' }]}>{name} - {cursor.y}-{String(cursor.m).padStart(2, '0')}</Text>
+        <Text style={[styles.subTitle, isRTL ? { textAlign: 'right' } : undefined]}>{name} - {cursor.y}-{String(cursor.m).padStart(2, '0')}</Text>
       )}
 
       {isLoading ? (
@@ -48,7 +48,7 @@ export default function EmployeeMonthDetail() {
         <FlatList
           data={sortedSessions}
           keyExtractor={(item) => item._id}
-          renderItem={({ item }) => <DayRow item={item} t={t} isRTL={true} />}
+          renderItem={({ item }) => <DayRow item={item} t={t} isRTL={isRTL} />}
           ListEmptyComponent={<Text style={styles.empty}>{t('noWorkDays')}</Text>}
           contentContainerStyle={{ paddingBottom: 24 }}
         />
@@ -62,16 +62,73 @@ function DayRow({ item, t, isRTL }: { item: WorkSession; t: (k: any) => string; 
   const total = item.duration;
   const dateLabel = new Date(item.clockIn).toISOString().split('T')[0];
 
-  // Resolve addresses for locations (if a label isn't already provided)
+  // Helper to detect if a label is actually coordinates "lat, lon"
+  const isCoordString = (s?: string | null) => typeof s === 'string' && /^\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*$/.test(s);
+
+  // Resolve addresses for locations (if a label isn't already provided or it's just raw coordinates)
   const [clockInAddress, setClockInAddress] = useState<string | null>(
-    item.clockInLocation?.label || null
+    (item.clockInLocation?.label && !isCoordString(item.clockInLocation.label)) ? item.clockInLocation.label : null
   );
   const [clockOutAddress, setClockOutAddress] = useState<string | null>(
-    item.clockOutLocation?.label || null
+    (item.clockOutLocation?.label && !isCoordString(item.clockOutLocation.label)) ? item.clockOutLocation.label : null
   );
+  const [clockInResolving, setClockInResolving] = useState(false);
+  const [clockOutResolving, setClockOutResolving] = useState(false);
 
   useEffect(() => {
     let mounted = true;
+
+    async function doReverseGeocode(lat: number, lon: number) {
+      try {
+        // Try the platform geocoder first
+        const res = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
+        if (res && res.length > 0) {
+          const formatted = formatAddress(res[0]);
+          if (formatted) return formatted;
+        }
+
+        // Fallback: use OpenStreetMap Nominatim reverse geocoding (no API key required)
+        // Note: Nominatim requires a valid User-Agent header; include a short app identifier.
+        try {
+          const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`;
+          const resp = await fetch(url, { headers: { 'User-Agent': 'alquds-sweets-app', Accept: 'application/json' } });
+          if (resp && resp.ok) {
+            const body = await resp.json();
+            if (body) {
+              if (body.display_name) return String(body.display_name);
+              // If display_name isn't present, try to build an address from the `address` object
+              if (body.address && typeof body.address === 'object') {
+                const a = body.address;
+                const parts: string[] = [];
+                // road/street + house number
+                if (a.road) parts.push(a.road);
+                if (a.house_number) parts.push(a.house_number);
+                // suburb/neighbourhood
+                if (a.suburb) parts.push(a.suburb);
+                if (a.neighbourhood) parts.push(a.neighbourhood);
+                // city/town/village
+                if (a.city) parts.push(a.city);
+                if (a.town) parts.push(a.town);
+                if (a.village) parts.push(a.village);
+                // state/county
+                if (a.state) parts.push(a.state);
+                if (a.county) parts.push(a.county);
+                // postcode, country
+                if (a.postcode) parts.push(a.postcode);
+                if (a.country) parts.push(a.country);
+                const built = parts.filter(Boolean).join(', ');
+                if (built) return built;
+              }
+            }
+          }
+        } catch (fallbackErr) {
+          console.warn('Nominatim reverse geocode failed', fallbackErr);
+        }
+      } catch (nativeErr) {
+        console.warn('Platform reverseGeocodeAsync failed', nativeErr);
+      }
+      return null;
+    }
 
     async function resolveIfNeeded() {
       try {
@@ -79,21 +136,31 @@ function DayRow({ item, t, isRTL }: { item: WorkSession; t: (k: any) => string; 
         if (
           mounted &&
           item.clockInLocation &&
-          !item.clockInLocation.label &&
-          (item.clockInLocation.latitude || item.clockInLocation.latitude === 0)
+          (!item.clockInLocation.label || isCoordString(item.clockInLocation.label)) &&
+          // allow numeric strings too
+          (item.clockInLocation.latitude !== undefined && item.clockInLocation.latitude !== null)
         ) {
-          const lat = item.clockInLocation.latitude;
-          const lon = item.clockInLocation.longitude;
-          const cacheKey = `${lat},${lon}`;
-          if (geocodeCache.has(cacheKey)) {
-            setClockInAddress(geocodeCache.get(cacheKey) || null);
+          setClockInResolving(true);
+          const latRaw = item.clockInLocation.latitude;
+          const lonRaw = item.clockInLocation.longitude;
+          const latNum = Number(latRaw);
+          const lonNum = Number(lonRaw);
+          if (!Number.isFinite(latNum) || !Number.isFinite(lonNum)) {
+            setClockInResolving(false);
           } else {
-            const coords = { latitude: lat, longitude: lon };
-            const res = await Location.reverseGeocodeAsync(coords);
-            if (mounted && res && res.length > 0) {
-              const formatted = formatAddress(res[0]);
-              geocodeCache.set(cacheKey, formatted);
-              setClockInAddress(formatted);
+            const cacheKey = `${latNum},${lonNum}`;
+            if (geocodeCache.has(cacheKey)) {
+              setClockInAddress(geocodeCache.get(cacheKey) || null);
+              setClockInResolving(false);
+            } else {
+              const formatted = await doReverseGeocode(latNum, lonNum);
+              if (mounted) {
+                if (formatted) {
+                  geocodeCache.set(cacheKey, formatted);
+                  setClockInAddress(formatted);
+                }
+                setClockInResolving(false);
+              }
             }
           }
         }
@@ -102,33 +169,71 @@ function DayRow({ item, t, isRTL }: { item: WorkSession; t: (k: any) => string; 
         if (
           mounted &&
           item.clockOutLocation &&
-          !item.clockOutLocation.label &&
-          (item.clockOutLocation.latitude || item.clockOutLocation.latitude === 0)
+          (!item.clockOutLocation.label || isCoordString(item.clockOutLocation.label)) &&
+          (item.clockOutLocation.latitude !== undefined && item.clockOutLocation.latitude !== null)
         ) {
-          const lat = item.clockOutLocation.latitude;
-          const lon = item.clockOutLocation.longitude;
-          const cacheKey = `${lat},${lon}`;
-          if (geocodeCache.has(cacheKey)) {
-            setClockOutAddress(geocodeCache.get(cacheKey) || null);
+          setClockOutResolving(true);
+          const latRaw = item.clockOutLocation.latitude;
+          const lonRaw = item.clockOutLocation.longitude;
+          const latNum = Number(latRaw);
+          const lonNum = Number(lonRaw);
+          if (!Number.isFinite(latNum) || !Number.isFinite(lonNum)) {
+            setClockOutResolving(false);
           } else {
-            const coords = { latitude: lat, longitude: lon };
-            const res = await Location.reverseGeocodeAsync(coords);
-            if (mounted && res && res.length > 0) {
-              const formatted = formatAddress(res[0]);
-              geocodeCache.set(cacheKey, formatted);
-              setClockOutAddress(formatted);
+            const cacheKey = `${latNum},${lonNum}`;
+            if (geocodeCache.has(cacheKey)) {
+              setClockOutAddress(geocodeCache.get(cacheKey) || null);
+              setClockOutResolving(false);
+            } else {
+              const formatted = await doReverseGeocode(latNum, lonNum);
+              if (mounted) {
+                if (formatted) {
+                  geocodeCache.set(cacheKey, formatted);
+                  setClockOutAddress(formatted);
+                }
+                setClockOutResolving(false);
+              }
             }
           }
         }
       } catch (err) {
         // If reverse geocoding fails, fall back to coordinates (already handled in render)
-        // console.warn('Reverse geocode failed', err);
+        console.warn('Reverse geocode failed', err);
+        setClockInResolving(false);
+        setClockOutResolving(false);
       }
     }
 
     resolveIfNeeded();
     return () => { mounted = false; };
-  }, [item.clockInLocation?.latitude, item.clockInLocation?.longitude, item.clockOutLocation?.latitude, item.clockOutLocation?.longitude]);
+  }, [item.clockInLocation, item.clockOutLocation]);
+
+  // Helper: produce a display string for a given location object.
+  // Prefer: reverse-geocoded address (resolved), then address fields on the location object, then provided label, then formatted coordinates.
+  function formatLocationText(loc: any | undefined | null, resolved?: string | null) {
+    if (!loc) return '';
+    if (resolved) return resolved;
+    // If the raw location object already contains address-like fields, prefer them
+    const addrParts: string[] = [];
+    if (loc.name) addrParts.push(String(loc.name));
+    if (loc.street) addrParts.push(String(loc.street));
+    if (loc.city) addrParts.push(String(loc.city));
+    if (loc.region) addrParts.push(String(loc.region));
+    if (loc.postalCode) addrParts.push(String(loc.postalCode));
+    if (loc.country) addrParts.push(String(loc.country));
+    const combined = addrParts.filter(Boolean).join(', ');
+    if (combined) return combined;
+    if (loc.label) return String(loc.label);
+    // Accept numeric strings as well as numbers
+    const latRaw = loc.latitude;
+    const lonRaw = loc.longitude;
+    const latNum = Number(latRaw);
+    const lonNum = Number(lonRaw);
+    if (Number.isFinite(latNum) && Number.isFinite(lonNum)) {
+      return `${latNum.toFixed(6)}, ${lonNum.toFixed(6)}`;
+    }
+    return '';
+  }
 
   return (
     <View style={[styles.dayRow, isRTL && styles.dayRowRtl]}>
@@ -137,13 +242,13 @@ function DayRow({ item, t, isRTL }: { item: WorkSession; t: (k: any) => string; 
         <Text style={[styles.timeLine, isRTL && { textAlign: 'right' }]}>{t('startTime')}: {new Date(item.clockIn).toLocaleTimeString()}</Text>
         {item.clockInLocation ? (
           <Text style={[styles.timeLine, isRTL && { textAlign: 'right' }]}>
-            {t('location') || 'Location'}: {clockInAddress ? clockInAddress : (item.clockInLocation.label ? item.clockInLocation.label : `${item.clockInLocation.latitude.toFixed(4)}, ${item.clockInLocation.longitude.toFixed(4)}`)}
+            {t('location') || 'Location'}: {clockInResolving ? (t('resolvingAddress') || 'Resolving address...') : formatLocationText(item.clockInLocation, clockInAddress)}
           </Text>
         ) : null}
         {item.clockOut && <Text style={[styles.timeLine, isRTL && { textAlign: 'right' }]}>{t('endTime')}: {new Date(item.clockOut).toLocaleTimeString()}</Text>}
         {item.clockOutLocation ? (
           <Text style={[styles.timeLine, isRTL && { textAlign: 'right' }]}>
-            {t('location') || 'Location'}: {clockOutAddress ? clockOutAddress : (item.clockOutLocation.label ? item.clockOutLocation.label : `${item.clockOutLocation.latitude.toFixed(4)}, ${item.clockOutLocation.longitude.toFixed(4)}`)}
+            {t('location') || 'Location'}: {clockOutResolving ? (t('resolvingAddress') || 'Resolving address...') : formatLocationText(item.clockOutLocation, clockOutAddress)}
           </Text>
         ) : null}
       </View>
@@ -155,13 +260,25 @@ function DayRow({ item, t, isRTL }: { item: WorkSession; t: (k: any) => string; 
 function formatAddress(addr: any) {
   // addr object may contain: name, street, postalCode, city, region, country
   const parts: string[] = [];
-  if (addr.name) parts.push(addr.name);
-  if (addr.street) parts.push(addr.street);
-  if (addr.city) parts.push(addr.city);
-  if (addr.region) parts.push(addr.region);
-  if (addr.postalCode) parts.push(addr.postalCode);
-  if (addr.country) parts.push(addr.country);
-  return parts.join(', ');
+  if (!addr) return '';
+  // Different platforms/response shapes: check multiple possible fields
+  if (addr.name) parts.push(String(addr.name));
+  if (addr.street) parts.push(String(addr.street));
+  if ((addr.street && addr.name) && addr.city) parts.push(String(addr.city));
+  // Common alternative fields
+  if ((addr.road) && !parts.length) parts.push(String(addr.road));
+  if (addr.houseNumber) parts.push(String(addr.houseNumber));
+  if (addr.house_number) parts.push(String(addr.house_number));
+  if (addr.suburb) parts.push(String(addr.suburb));
+  if (addr.city) parts.push(String(addr.city));
+  if (addr.town) parts.push(String(addr.town));
+  if (addr.village) parts.push(String(addr.village));
+  if (addr.region) parts.push(String(addr.region));
+  if (addr.county) parts.push(String(addr.county));
+  if (addr.postalCode) parts.push(String(addr.postalCode));
+  if (addr.postcode) parts.push(String(addr.postcode));
+  if (addr.country) parts.push(String(addr.country));
+  return parts.filter(Boolean).join(', ');
 }
 
 const styles = StyleSheet.create({
