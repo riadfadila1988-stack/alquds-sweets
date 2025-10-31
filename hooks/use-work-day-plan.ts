@@ -1,13 +1,22 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getWorkDayPlanByDate, createOrUpdateWorkDayPlan } from '@/services/work-day-plan';
 
+const formatDateLocal = (d: Date) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
 export function useWorkDayPlan(date?: string) {
   const queryClient = useQueryClient();
 
+  const effectiveDate = date ?? formatDateLocal(new Date());
+
   const { data: plan, isLoading, error } = useQuery({
-    queryKey: ['workDayPlan', date],
-    queryFn: () => getWorkDayPlanByDate(date || new Date().toISOString()),
-    enabled: !!date,
+    queryKey: ['workDayPlan', effectiveDate],
+    queryFn: () => getWorkDayPlanByDate(effectiveDate),
+    enabled: !!effectiveDate,
   });
 
   const saveMutation = useMutation({
@@ -25,4 +34,3 @@ export function useWorkDayPlan(date?: string) {
     save: saveMutation.mutateAsync,
   };
 }
-

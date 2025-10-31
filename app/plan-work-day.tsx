@@ -1,15 +1,14 @@
 import React, {useMemo, useState, useRef, useEffect} from 'react';
-import {View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, Platform, Alert, I18nManager, KeyboardAvoidingView, Keyboard, LayoutAnimation, UIManager} from 'react-native';
+import {View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, Platform, Alert, I18nManager, KeyboardAvoidingView, Keyboard, UIManager} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Header from './components/header';
 import {useUsers} from '@/hooks/use-users';
-import {useTaskGroups} from '@/hooks/use-task-groups';
 import {useWorkDayPlan} from '@/hooks/use-work-day-plan';
 import {useThemeColor} from '@/hooks/use-theme-color';
-import Task from '@/components/task-group/task';
 import {useTranslation} from '@/app/_i18n';
 import {MaterialIcons} from '@expo/vector-icons';
 import {useMaterials} from '@/hooks/use-materials';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 // NOTE: don't import 'react-native-draggable-flatlist' statically because it
 // depends on react-native-reanimated which can throw on web (Value is not a constructor).
 // We'll require it at runtime only on native platforms.
@@ -34,6 +33,7 @@ export default function PlanWorkDayScreen() {
     }, []);
     const backgroundColor = useThemeColor({}, 'background');
     const textColor = useThemeColor({}, 'text');
+    const router = useRouter();
 
     // detect RTL from react-native's I18nManager; for web also respect document.dir
     const isRTL = (() => {
@@ -58,13 +58,59 @@ export default function PlanWorkDayScreen() {
     // No native draggable module is used.
 
     const {users: allUsers} = useUsers();
-    const {taskGroups} = useTaskGroups();
 
-    const [date, setDate] = useState(new Date());
-    const [editingDate, setEditingDate] = useState<string>(date.toISOString().slice(0, 10));
-    const [showDatePicker, setShowDatePicker] = useState(false);
+    // If a `date` query param is present (format YYYY-MM-DD) prefer it when initializing the screen.
+    const { date: dateParam } = useLocalSearchParams<{ date?: string }>();
 
-    const isoDate = useMemo(() => date.toISOString().slice(0, 10), [date]);
+    // Parse YYYY-MM-DD as a local date to avoid UTC parsing behavior of new Date('YYYY-MM-DD')
+    const parseISODate = (s?: string) => {
+        if (!s) return null;
+        const m = /^\s*(\d{4})-(\d{2})-(\d{2})\s*$/.exec(s);
+        if (m) {
+            const year = Number(m[1]);
+            const month = Number(m[2]);
+            const day = Number(m[3]);
+            // Construct a local Date at midnight local time for the given y/m/d
+            const d = new Date(year, month - 1, day);
+            return Number.isNaN(d.getTime()) ? null : d;
+        }
+        // Fallback: allow other date formats, but these may be timezone-sensitive
+        const d = new Date(s);
+        return Number.isNaN(d.getTime()) ? null : d;
+    };
+
+    const formatDateLocal = (d: Date) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    };
+
+    const initialDate = (() => {
+        const fromParam = parseISODate(typeof dateParam === 'string' ? dateParam : undefined);
+        return fromParam ?? new Date();
+    })();
+
+    const [date, setDate] = useState<Date>(initialDate);
+    const [editingDate, setEditingDate] = useState<string>(() => formatDateLocal(initialDate));
+    const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
+
+    // If the route param changes while this screen is focused, update the displayed date to match it.
+    useEffect(() => {
+        if (typeof dateParam === 'string') {
+            const parsed = parseISODate(dateParam);
+            if (parsed) {
+                // Only update if different to avoid clobbering user edits
+                const iso = formatDateLocal(parsed);
+                if (iso !== formatDateLocal(date)) {
+                    setDate(parsed);
+                    setEditingDate(iso);
+                }
+            }
+        }
+    }, [dateParam, date]);
+
+    const isoDate = useMemo(() => formatDateLocal(date), [date]);
 
     const {plan, save} = useWorkDayPlan(isoDate);
 
@@ -103,10 +149,6 @@ export default function PlanWorkDayScreen() {
         if (plan && plan.assignments) return plan.assignments.map((a: any) => ({...a}));
         return [];
     });
-
-    // Brief visual highlight for the task that was just moved. We store the
-    // destination index and user id so the UI can flash that row.
-    const [movedItem, setMovedItem] = useState<{userId: string, index: number} | null>(null);
 
     // Enable LayoutAnimation on Android (experimental flag)
     useEffect(() => {
@@ -201,95 +243,11 @@ export default function PlanWorkDayScreen() {
         }
     };
 
-    const addManualTask = (userId: string) => {
-        const empty = {name: '', duration: 30, description: '', usedMaterials: []};
-        setAssignments(prev => prev.map(a => {
-            if (String(a.user._id || a.user) === String(userId)) {
-                return {...a, tasks: [...(a.tasks || []), empty]};
-            }
-            return a;
-        }));
-    };
-
-    const addTaskGroupToUser = (userId: string, group: any) => {
-        // Copy tasks (including description and usedMaterials) from the selected
-        // group into the assignment. When a task in the group references a
-        // material by id we resolve it to the full material object from the
-        // loaded materials so the UI shows the material name instead of the id.
-        const tasksOnly = (group.tasks || []).map((t: any) => ({
-            name: t.name,
-            duration: t.duration,
-            description: t.description,
-            usedMaterials: (t.usedMaterials || []).map((um: any) => {
-                // Resolve using the shared helper so we handle strings, objects and $oid shapes.
-                const resolved = resolveMaterialRef((um as any)?.material);
-                return {material: resolved ?? (um as any)?.material, quantity: um.quantity};
-            }),
-        }));
-
-        setAssignments(prev => prev.map(a => {
-            if (String(a.user._id || a.user) === String(userId)) {
-                return {...a, tasks: [...(a.tasks || []), ...tasksOnly]};
-            }
-            return a;
-        }));
-    };
-
-    const updateTask = (userId: string, taskIndex: number, partial: any) => {
-        // If partial is a full task object, replace; otherwise merge
-        setAssignments(prev => prev.map((a: any) => {
-            if (String(a.user._id || a.user) === String(userId)) {
-                const tasks = [...(a.tasks || [])];
-                tasks[taskIndex] = {...tasks[taskIndex], ...partial};
-                return {...a, tasks};
-            }
-            return a;
-        }));
-    };
-
-    const removeTask = (userId: string, taskIndex: number) => {
-        setAssignments(assignments.map((a: any) => {
-            if (String(a.user._id || a.user) === String(userId)) {
-                const tasks = [...(a.tasks || [])];
-                tasks.splice(taskIndex, 1);
-                return {...a, tasks};
-            }
-            return a;
-        }));
-    };
-
-    // Helper to move a task within the tasks array for a user
-    const moveTask = (userId: string, from: number, to: number) => {
-        if (from === to) return;
-        // Use LayoutAnimation for a smooth reorder transition
-        try {
-            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        } catch {
-            // no-op if LayoutAnimation isn't available for some platform/version
-        }
-
-        setAssignments(prev => prev.map((a: any) => {
-            if (String(a.user._id || a.user) === String(userId)) {
-                const tasks = [...(a.tasks || [])];
-                if (from < 0 || from >= tasks.length || to < 0 || to > tasks.length) return a;
-                const [moved] = tasks.splice(from, 1);
-                tasks.splice(to, 0, moved);
-                return {...a, tasks};
-            }
-            return a;
-        }));
-
-        // Flash the moved row at its destination index
-        const uid = String(userId);
-        setMovedItem({userId: uid, index: to});
-        setTimeout(() => setMovedItem(null), 400);
-    };
-
     const handleSave = async () => {
         // ensure date is synced from editing if open
         if (showDatePicker) {
-            const parsed = new Date(editingDate);
-            if (!Number.isNaN(parsed.getTime())) setDate(parsed);
+            const parsed = parseISODate(editingDate);
+            if (parsed) setDate(parsed);
             setShowDatePicker(false);
         }
 
@@ -345,14 +303,14 @@ export default function PlanWorkDayScreen() {
         const d = new Date(date);
         d.setDate(d.getDate() - 1);
         setDate(d);
-        setEditingDate(d.toISOString().slice(0, 10));
+        setEditingDate(formatDateLocal(d));
     };
 
     const nextDay = () => {
         const d = new Date(date);
         d.setDate(d.getDate() + 1);
         setDate(d);
-        setEditingDate(d.toISOString().slice(0, 10));
+        setEditingDate(formatDateLocal(d));
     };
 
     // icon names should follow logical action (prev/next) but flip visually
@@ -393,8 +351,8 @@ export default function PlanWorkDayScreen() {
                                    placeholder="YYYY-MM-DD"/>
                         <View style={{flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8}}>
                             <TouchableOpacity style={[styles.smallBtn, {marginRight: 8}]} onPress={() => {
-                                const parsed = new Date(editingDate);
-                                if (!Number.isNaN(parsed.getTime())) {
+                                const parsed = parseISODate(editingDate);
+                                if (parsed) {
                                     setDate(parsed);
                                     setShowDatePicker(false);
                                 }
@@ -449,66 +407,42 @@ export default function PlanWorkDayScreen() {
                                   style={{flexDirection: isRTL ? 'row-reverse' : 'row', justifyContent: 'space-between', alignItems: 'center'}}>
                     <Text
                         style={{fontWeight: '600', textAlign: isRTL ? 'right' : 'left'}}>{userObj.name + ' (' + formatMinutes(getTotalMinutesForUser(a.user._id || a.user)) + ')'}</Text>
-                    <MaterialIcons name={isOpen ? 'expand-less' : 'expand-more'} size={24} color="#666" />
+                    <View style={{flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center'}}>
+                        <TouchableOpacity onPress={() => router.push({ pathname: '/edit-employee-tasks/[id]', params: { id: userId, date: isoDate } })} style={{padding: 6, marginRight: isRTL ? 0 : 8, marginLeft: isRTL ? 8 : 0}} accessibilityLabel={t('editTasks') || 'Edit tasks'}>
+                            <MaterialIcons name="edit" size={20} color="#2196F3" />
+                        </TouchableOpacity>
+                        <MaterialIcons name={isOpen ? 'expand-less' : 'expand-more'} size={24} color="#666" />
+                    </View>
                 </TouchableOpacity>
 
                 {/* Only render the assignment details (tasks, buttons) when this assignment is open */}
                 {isOpen && (
                     <View style={{marginTop: 8}}>
-                        <View style={{flexDirection: isRTL ? 'row-reverse' : 'row', marginTop: 8}}>
-                            <TouchableOpacity style={styles.smallBtn}
-                                              onPress={() => addManualTask(a.user._id || a.user)}>
-                                <Text style={{color: 'white'}}>{t('addTask') || 'Add Task'}</Text>
-                            </TouchableOpacity>
-                            <View style={{width: 8}}/>
-                            <View style={{flex: 1}}>
-                                <FlatList
-                                    horizontal
-                                    data={taskGroups || []}
-                                    keyExtractor={(g: any) => String(g._id)}
-                                    renderItem={({item: g}: {item: any}) => (
-                                        <TouchableOpacity style={styles.groupBtn}
-                                                          onPress={() => addTaskGroupToUser(a.user._id || a.user, g)}>
-                                            <Text style={{color: 'white'}}>{g.name}</Text>
-                                        </TouchableOpacity>
-                                    )}
-                                    showsHorizontalScrollIndicator={false}
-                                />
-                            </View>
-                        </View>
-
                         {/* Render tasks with Up/Down arrow buttons for reordering on all platforms */}
                         {(a.tasks || []).map((task: any, ti: number) => (
-                            // If this task was just moved, briefly highlight it
-                            <View key={ti} style={[{flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center'},
-                                movedItem && movedItem.userId === String(a.user._id || a.user) && movedItem.index === ti ? {backgroundColor: '#e6f7ff', borderRadius: 6, paddingVertical: 4} : {}
-                            ]}>
-                                <View style={{width: 40, alignItems: 'center'}}>
-                                    <TouchableOpacity
-                                        accessibilityLabel={t('moveUp') || 'Move task up'}
-                                        disabled={ti === 0}
-                                        onPress={() => moveTask(a.user._id || a.user, ti, ti - 1)}
-                                        style={[styles.arrowControlBtn, {opacity: ti === 0 ? 0.4 : 1}]}
-                                    >
-                                        <Text style={{color: 'white', fontSize: 16}}>↑</Text>
-                                    </TouchableOpacity>
-                                    <View style={{height: 6}}/>
-                                    <TouchableOpacity
-                                        accessibilityLabel={t('moveDown') || 'Move task down'}
-                                        disabled={ti === (a.tasks || []).length - 1}
-                                        onPress={() => moveTask(a.user._id || a.user, ti, ti + 1)}
-                                        style={[styles.arrowControlBtn, {opacity: ti === (a.tasks || []).length - 1 ? 0.4 : 1}]}
-                                    >
-                                        <Text style={{color: 'white', fontSize: 16}}>↓</Text>
-                                    </TouchableOpacity>
-                                </View>
+                            <View key={ti} style={{flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'flex-start', marginVertical: 6}}>
                                 <View style={{flex: 1}} pointerEvents="box-none">
-                                    <Task
-                                        task={task}
-                                        onChange={(newTask) => updateTask(a.user._id || a.user, ti, newTask)}
-                                        onRemove={() => removeTask(a.user._id || a.user, ti)}
-                                        index={ti}
-                                    />
+                                    {/* Static read-only task card (replaces interactive Task component) */}
+                                    <View style={styles.staticTaskCard}>
+                                        <Text style={{fontWeight: '600', marginBottom: 4}}>{task?.name || (t('unnamedTask') || 'Unnamed task')}</Text>
+                                        <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 4}}>
+                                            <MaterialIcons name="access-time" size={16} color="#444" style={{marginRight: 6}} />
+                                            <Text style={{color: '#444'}}>{formatMinutes(task?.duration || 0)}</Text>
+                                        </View>
+                                        {task?.description ? <Text style={{color: '#666', marginBottom: 6}}>{task.description}</Text> : null}
+                                        {(task?.usedMaterials || []).length > 0 && (
+                                            <View style={{marginTop: 4}}>
+                                                <Text style={{fontWeight: '600', marginBottom: 2}}>{t('materials') || 'Materials'}:</Text>
+                                                {(task.usedMaterials || []).map((um: any, umi: number) => {
+                                                    const mat = resolveMaterialRef((um as any)?.material) ?? (um as any)?.material;
+                                                    const name = typeof mat === 'object' ? (mat.name ?? String(mat._id ?? mat.id ?? mat)) : String(mat);
+                                                    return (
+                                                        <Text key={umi} style={{color: '#555'}}>- {name} x {String((um as any)?.quantity ?? 0)}</Text>
+                                                    );
+                                                })}
+                                            </View>
+                                        )}
+                                    </View>
                                 </View>
                             </View>
                         ))}
@@ -525,18 +459,20 @@ export default function PlanWorkDayScreen() {
             keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 80}
         >
             <SafeAreaView style={{flex: 1}} edges={['bottom']}>
+                {/* Fixed header + employees area (does not scroll) */}
+                {renderHeader()}
+
                 <FlatList
                  ref={(r) => { flatListRef.current = r; }}
                  onScroll={(e) => { prevOffsetRef.current = e.nativeEvent.contentOffset.y; }}
                  scrollEventThrottle={16}
                   data={assignments}
                   keyExtractor={(item) => String(item.user._id || item.user)}
-                  ListHeaderComponent={renderHeader}
                  ListEmptyComponent={() => (
                     <Text style={{color: textColor, paddingHorizontal: 16}}>{t('noEmployeesSelected') || 'No employees selected'}</Text>
                 )}
                  renderItem={renderAssignment}
-                 // FlatList should fill the available space, contentContainer should size to content
+                 // FlatList should fill the available space under the fixed header
                  style={[styles.fullHeight, {backgroundColor}]}
                  // writingDirection is not present on some React Native TypeScript defs; cast the inline style to `any`
                  contentContainerStyle={[styles.container, ({ writingDirection: isRTL ? 'rtl' : 'ltr' } as any)]}
@@ -592,18 +528,11 @@ const styles = StyleSheet.create({
         paddingHorizontal: 8,
         borderRadius: 4,
     },
-    // Larger touch target for arrow reordering (up/down) buttons
-    arrowControlBtn: {
-        backgroundColor: '#2196F3',
-        paddingVertical: 8,
-        paddingHorizontal: 10,
-        borderRadius: 6,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
     togglesContainer: {
         flexWrap: 'wrap',
         marginBottom: 16,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
     },
     userToggle: {
         paddingVertical: 8,
@@ -628,6 +557,8 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '600',
         marginBottom: 8,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
     },
     assignmentCard: {
         padding: 16,
@@ -721,5 +652,13 @@ const styles = StyleSheet.create({
         padding: 8,
         borderRadius: 6,
         backgroundColor: '#fafafa',
+    },
+    staticTaskCard: {
+        backgroundColor: '#ffffff',
+        borderRadius: 6,
+        padding: 10,
+        marginVertical: 6,
+        borderWidth: 1,
+        borderColor: '#eee',
     },
 });
