@@ -216,72 +216,14 @@ export default function WorkStatusScreen() {
     );
   }
 
-  // list of currently active task entries (tasks with startTime and no endTime)
+  // Build a list of employees from the plan's assignments only.
+  // We will NOT include employees who are not part of the plan (even if they have an open attendance session).
   const activeEntries: any[] = [];
 
-  // plan.assignments expected shaped like [{ user: { _id, name }, tasks: [{ name, duration, startTime, endTime }] }]
+  // Only iterate assignments from today's plan. For each assigned employee, gather their
+  // tasks and detect if they are currently working (active task or open attendance session).
   if (plan && Array.isArray(plan.assignments)) {
     for (const assignment of plan.assignments) {
-      const user = assignment.user || assignment.userId || null;
-      const tasks = Array.isArray(assignment.tasks) ? assignment.tasks : [];
-
-      for (const task of tasks) {
-        // Normalize task start/end/duration from a variety of possible backend shapes
-        const start = getTaskStart(task);
-        const end = getTaskEnd(task);
-        const duration = getTaskDurationMinutes(task);
-
-        // Consider active if there's a start and no end OR employee has an open attendance session
-        let activeStart = start;
-        if (!activeStart) {
-          // fallback: derive employee id from the assignment and use their open attendance session if available
-          let empId: string | undefined | null = null;
-          if (assignment && assignment.user) {
-            if (typeof assignment.user === 'string') empId = assignment.user;
-            else empId = assignment.user._id || assignment.user.id || null;
-          } else if ((assignment as any).userId) {
-            empId = (assignment as any).userId;
-          }
-          const session = empId ? currentSessionsMap[empId] : null;
-          if (session && session.clockIn) {
-            activeStart = new Date(session.clockIn);
-          }
-        }
-
-        if (activeStart && !end) {
-          const elapsedMinutes = Math.floor((Date.now() - activeStart.getTime()) / 60000);
-          const assignedDuration = duration ?? 0; // default 0 when unknown
-
-          // Add active task entry. Mark `simpleView: true` so we can optionally
-          // render only the employee name (no task details) as requested.
-          activeEntries.push({
-            user,
-            task,
-            start: activeStart,
-            elapsedMinutes,
-            assignedDuration,
-            simpleView: true,
-          });
-        }
-      }
-    }
-  }
-
-  // Also include open attendance sessions that are not reflected as active tasks in the plan
-  const includedEmployeeIds = new Set<string>();
-  for (const entry of activeEntries) {
-    // try to find employee id from entry.user
-    const u = entry.user;
-    if (u && typeof u === 'object') {
-      if (u._id) includedEmployeeIds.add(String(u._id));
-      else if (u.id) includedEmployeeIds.add(String(u.id));
-    }
-  }
-
-  // Add employees who are in the plan but have no tasks (or tasks array empty).
-  if (plan && Array.isArray(plan.assignments)) {
-    for (const assignment of plan.assignments) {
-      // derive employee id
       let empId: string | null = null;
       let userObj: any = null;
       if (assignment.user) {
@@ -291,41 +233,45 @@ export default function WorkStatusScreen() {
       } else if ((assignment as any).userId) {
         empId = (assignment as any).userId;
       }
+      if (!empId) continue;
 
-      // if employee not already included and they have no tasks, show as simple entry
-      const tasksArr = Array.isArray(assignment.tasks) ? assignment.tasks : [];
-      if (empId && !includedEmployeeIds.has(String(empId)) && tasksArr.length === 0) {
-        const uObj = userObj || usersMap[empId] || empId;
-        activeEntries.push({
-          user: uObj,
-          task: null,
-          start: undefined,
-          elapsedMinutes: undefined,
-          assignedDuration: undefined,
-          simpleView: true,
-        });
-        includedEmployeeIds.add(String(empId));
+      const idStr = String(empId);
+      const tasks = getTasksForEmployee(idStr);
+      const activeTask = tasks.find((tk: any) => getTaskStart(tk) && !getTaskEnd(tk));
+
+      let start: Date | undefined = undefined;
+      let elapsedMinutes: number | undefined = undefined;
+      let assignedDuration: number | undefined = undefined;
+      let taskForView: any = null;
+
+      if (activeTask) {
+        start = getTaskStart(activeTask) as Date;
+        if (start) elapsedMinutes = Math.floor((Date.now() - start.getTime()) / 60000);
+        assignedDuration = getTaskDurationMinutes(activeTask) ?? undefined;
+        taskForView = activeTask;
+      } else {
+        // If the employee has an open attendance session, consider them working even if no task started.
+        const session = currentSessionsMap[idStr];
+        if (session && session.clockIn && !session.clockOut) {
+          start = new Date(session.clockIn);
+          elapsedMinutes = Math.floor((Date.now() - start.getTime()) / 60000);
+          taskForView = null;
+        }
       }
-    }
-  }
 
-  for (const empId of Object.keys(currentSessionsMap)) {
-    if (includedEmployeeIds.has(empId)) continue;
-    const s = currentSessionsMap[empId];
-    if (!s) continue;
-    // create a synthetic entry to show employee is working (no assigned task)
-    const start = new Date(s.clockIn);
-    const userObj = usersMap[empId] || empId;
-    activeEntries.push({
-      user: userObj,
-      task: { name: t('working') || 'Working' },
-      start,
-      // When the employee is only clocked-in (no started task), show details as '--'
-      // by leaving these values undefined so formatDurationMinutes returns '--'.
-      elapsedMinutes: undefined,
-      assignedDuration: undefined,
-      simpleView: true,
-    });
+      const isWorking = !!start;
+
+      activeEntries.push({
+        user: userObj || usersMap[idStr] || idStr,
+        empId: idStr,
+        task: taskForView,
+        tasksAll: tasks,
+        start,
+        elapsedMinutes,
+        assignedDuration,
+        simpleView: !isWorking,
+      });
+    }
   }
 
   return (
