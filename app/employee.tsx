@@ -1,25 +1,25 @@
 import React from 'react';
 import {View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert} from 'react-native';
 import {useTranslation} from './_i18n';
-import {Link} from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import Header from './components/header';
 import { useAuth } from '@/hooks/use-auth';
-import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function EmployeeScreen() {
     const {t} = useTranslation();
-    const { logout } = useAuth();
+    const { user, logout } = useAuth();
     const router = useRouter();
     return (
         <View style={styles.screen}>
-            <Header title={t('employeeDashboard') || 'Employee'} showBack={false} right={
+            <Header title={t('employeeDashboard') || 'Employee'} subtitle={user?.name} showBack={false} right={
                 <TouchableOpacity accessibilityRole="button" onPress={() => {
                     Alert.alert(t('logout') || 'Logout', t('confirmLogout') || 'Are you sure you want to logout?', [
                         { text: t('cancel') || 'Cancel', style: 'cancel' },
                         { text: t('logout') || 'Logout', style: 'destructive', onPress: async () => { await logout(); router.replace('/'); } }
                     ]);
                 }}>
-                    <Text style={{ fontSize: 18, padding: 6 }}>⎋</Text>
+                    <Ionicons name="power" size={20} color="#333" accessibilityLabel={t('logout') || 'Logout'} />
                 </TouchableOpacity>
             }/>
 

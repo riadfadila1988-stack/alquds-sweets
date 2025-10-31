@@ -8,12 +8,13 @@ import { useTranslation } from '../_i18n';
 type HeaderProps = {
   title?: string;
   titleKey?: string; // optional i18n key to translate
+  subtitle?: string; // optional second line (e.g., user name)
   showBack?: boolean;
   onBack?: () => void;
   right?: React.ReactNode;
 };
 
-export default function Header({ title, titleKey, showBack = true, onBack, right }: HeaderProps) {
+export default function Header({ title, titleKey, subtitle, showBack = true, onBack, right }: HeaderProps) {
   const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -41,6 +42,7 @@ export default function Header({ title, titleKey, showBack = true, onBack, right
         <View style={styles.titleWrap}>
           {/* Prefer explicit titleKey for translation; fall back to title prop (already translated) */}
           { (/* @ts-ignore */ titleKey) ? <Text numberOfLines={1} style={styles.title}>{t((titleKey as any) || '')}</Text> : (title ? <Text numberOfLines={1} style={styles.title}>{title}</Text> : null) }
+          {subtitle ? <Text numberOfLines={1} style={styles.subtitle}>{subtitle}</Text> : null}
         </View>
 
         <View style={styles.rightWrap}>{right ?? <View style={styles.rightPlaceholder} />}</View>
@@ -80,6 +82,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: '600',
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 13,
+    color: '#666',
+    marginTop: 2,
     textAlign: 'center',
   },
   rightWrap: {

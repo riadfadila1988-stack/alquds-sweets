@@ -6,6 +6,7 @@ import { useNotifications } from '@/hooks/use-notifications';
 import { useAuth } from '@/hooks/use-auth';
 import Header from './components/header';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function AdminScreen() {
     const {t} = useTranslation();
@@ -19,6 +20,7 @@ export default function AdminScreen() {
         <SafeAreaView style={styles.container}>
             <Header
               title={t('admin') || 'Admin Dashboard'}
+              subtitle={user?.name}
               showBack={false}
               right={
                 // show notification icon (for admins) and a logout button side-by-side
@@ -36,7 +38,7 @@ export default function AdminScreen() {
                       { text: t('logout') || 'Logout', style: 'destructive', onPress: async () => { await logout(); router.replace('/'); } }
                     ]);
                   }} style={{ padding: 6 }}>
-                    <Text style={[styles.logoutText]}>⎋</Text>
+                    <Ionicons name="power" size={20} color={styles.logoutText.color} accessibilityLabel={t('logout') || 'Logout'} />
                   </TouchableOpacity>
                 </View>
               }
