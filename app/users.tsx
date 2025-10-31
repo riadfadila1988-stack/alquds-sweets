@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Switch, I18nManager } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Switch } from 'react-native';
 import { useTranslation } from './_i18n';
 import Header from './components/header';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,7 +13,7 @@ export default function UsersScreen() {
   const { users, isLoading } = useUsers();
   const queryClient = useQueryClient();
   const router = useRouter();
-  const isRTL = I18nManager.isRTL;
+  const isRTL = true;
 
   const toggleActive = async (id: string, currentlyActive: boolean) => {
     try {
@@ -27,13 +27,13 @@ export default function UsersScreen() {
   };
 
   const renderItem = ({ item }: any) => (
-    <View style={styles.item}>
+    <View style={[styles.item, isRTL ? styles.itemRtl : null]}>
       <TouchableOpacity style={{ flex: 1 }} activeOpacity={0.7} onPress={() => router.push({ pathname: '/edit-user/[id]', params: { id: item._id } } as any)}>
-        <Text style={styles.name}>{item.name}</Text>
-        <Text style={styles.meta}>{item.idNumber} • {item.role}</Text>
+        <Text style={[styles.name, isRTL ? styles.textRight : null]}>{item.name}</Text>
+        <Text style={[styles.meta, isRTL ? styles.textRight : null]}>{item.idNumber} • {item.role}</Text>
       </TouchableOpacity>
 
-      <View style={styles.actions}>
+      <View style={[styles.actions, isRTL ? styles.actionsRtl : null]}>
         <Switch value={!!item.active} onValueChange={() => toggleActive(item._id, item.active)} />
       </View>
     </View>
@@ -43,7 +43,6 @@ export default function UsersScreen() {
     <SafeAreaView style={styles.container}>
       <Header titleKey="manageUsers" />
       <View style={styles.topRow}>
-        <Text style={styles.subtitle}>{t('userListSubtitle') || 'List of registered users'}</Text>
       </View>
 
       {isLoading ? (
@@ -73,8 +72,13 @@ const styles = StyleSheet.create({
   // mirrored add button for RTL
   addBtnRTL: { left: 20, right: undefined },
   addText: { color: '#fff', fontSize: 32, lineHeight: 34 },
-  item: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: '#f8fafc', borderRadius: 10, marginHorizontal: 0 },
+  item: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, backgroundColor: '#f8fafc', borderRadius: 10, marginHorizontal: 0 },
+  // RTL variant flips row ordering so name/meta appear on the right and switch on the left
+  itemRtl: { flexDirection: 'row-reverse' },
   name: { fontSize: 16, fontWeight: '600' },
   meta: { color: '#6b7280', marginTop: 4 },
   actions: { marginLeft: 12, alignItems: 'center', justifyContent: 'center' },
+  // Adjust actions spacing for RTL
+  actionsRtl: { marginLeft: 0, marginRight: 12 },
+  textRight: { textAlign: 'right' },
 });

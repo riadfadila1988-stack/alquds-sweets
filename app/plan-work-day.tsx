@@ -1,5 +1,5 @@
 import React, {useMemo, useState, useRef, useEffect} from 'react';
-import {View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, Modal, Platform, Alert, I18nManager, KeyboardAvoidingView, Keyboard, UIManager} from 'react-native';
+import {View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, Platform, Alert, KeyboardAvoidingView, Keyboard, UIManager}from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Header from './components/header';
 import {useUsers} from '@/hooks/use-users';
@@ -35,19 +35,8 @@ export default function PlanWorkDayScreen() {
     const textColor = useThemeColor({}, 'text');
     const router = useRouter();
 
-    // detect RTL from react-native's I18nManager; for web also respect document.dir
-    const isRTL = (() => {
-        try {
-            if (I18nManager.isRTL) return true;
-            if (Platform.OS === 'web' && typeof document !== 'undefined') {
-                const dir = document.documentElement.getAttribute('dir');
-                return dir === 'rtl';
-            }
-        } catch {
-            // ignore
-        }
-        return false;
-    })();
+    // App-wide policy: always use RTL layout
+    const isRTL = true;
 
     // load materials so we can copy full material objects (with names) when
     // copying tasks from a task group into an assignment. If materials are not
@@ -327,7 +316,7 @@ export default function PlanWorkDayScreen() {
 
                 <TouchableOpacity onPress={prevDay} style={styles.arrowBtn}
                                   accessibilityLabel={t('previousDay') || 'Previous day'}>
-                    <MaterialIcons name={prevIconName} size={28} color={textColor}/>
+                    <MaterialIcons name={nextIconName} size={28} color={textColor}/>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.dateDisplay} onPress={() => {
                     setShowDatePicker(true);
@@ -337,7 +326,7 @@ export default function PlanWorkDayScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity onPress={nextDay} style={styles.arrowBtn}
                                   accessibilityLabel={t('nextDay') || 'Next day'}>
-                    <MaterialIcons name={nextIconName} size={28} color={textColor}/>
+                    <MaterialIcons name={prevIconName} size={28} color={textColor}/>
                 </TouchableOpacity>
 
             </View>
@@ -346,27 +335,11 @@ export default function PlanWorkDayScreen() {
                    onRequestClose={() => setShowDatePicker(false)}>
                 <View style={styles.modalOverlay}>
                     <View style={[styles.modalInner, {alignSelf: 'stretch'}]}>
-                        <Text style={[styles.label, {textAlign: isRTL ? 'right' : 'left'}]}>{t('selectDate') || 'Select date'}</Text>
-                        <TextInput value={editingDate} onChangeText={setEditingDate} style={[styles.input, {textAlign: isRTL ? 'right' : 'left'}]}
-                                   placeholder="YYYY-MM-DD"/>
-                        <View style={{flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8}}>
-                            <TouchableOpacity style={[styles.smallBtn, {marginRight: 8}]} onPress={() => {
-                                const parsed = parseISODate(editingDate);
-                                if (parsed) {
-                                    setDate(parsed);
-                                    setShowDatePicker(false);
-                                }
-                            }}>
-                                <Text style={{color: 'white'}}>{t('set') || 'Set'}</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={[styles.smallBtn, {backgroundColor: '#777'}]}
-                                              onPress={() => setShowDatePicker(false)}>
-                                <Text style={{color: 'white'}}>{t('cancel') || 'Cancel'}</Text>
-                            </TouchableOpacity>
-                        </View>
+                        {/* Custom date picker: calendar, month picker, year picker */}
+                        <DatePickerContents />
                     </View>
                 </View>
-            </Modal>
+             </Modal>
 
             <Text style={[styles.sectionTitle, {color: textColor, textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr'}]}>{t('employees') || 'Employees'}</Text>
             {/* Employees shown as toggle-pill buttons so admin can quickly select/deselect employees */}
@@ -429,7 +402,7 @@ export default function PlanWorkDayScreen() {
                                             <MaterialIcons name="access-time" size={16} color="#444" style={{marginRight: 6}} />
                                             <Text style={{color: '#444'}}>{formatMinutes(task?.duration || 0)}</Text>
                                         </View>
-                                        {task?.description ? <Text style={{color: '#666', marginBottom: 6}}>{task.description}</Text> : null}
+                                        {task?.description ? <Text style={{color: '#666', marginBottom: 6, textAlign: 'right'}}>{task.description}</Text> : null}
                                         {(task?.usedMaterials || []).length > 0 && (
                                             <View style={{marginTop: 4}}>
                                                 <Text style={{fontWeight: '600', marginBottom: 2}}>{t('materials') || 'Materials'}:</Text>
@@ -451,6 +424,153 @@ export default function PlanWorkDayScreen() {
             </View>
         );
     };
+
+    // --- Date picker component (moved inside PlanWorkDayScreen so it can access state) ---
+    function DatePickerContents() {
+        const {t} = useTranslation();
+        const [view, setView] = useState<'calendar'|'months'|'years'>('calendar');
+        const [pickerDate, setPickerDate] = useState<Date>(parseISODate(editingDate) ?? date ?? new Date());
+
+        // Sync picker when modal opens. Disable exhaustive-deps rule because we intentionally only want to react when showDatePicker toggles.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        useEffect(() => {
+            if (showDatePicker) {
+                const p = parseISODate(editingDate) ?? date ?? new Date();
+                setPickerDate(p);
+                setView('calendar');
+            }
+        }, [showDatePicker]);
+
+        const monthNames = [
+            'January','February','March','April','May','June','July','August','September','October','November','December'
+        ];
+
+        const daysInMonth = (y:number, m:number) => new Date(y, m + 1, 0).getDate();
+        const firstWeekdayOfMonth = (y:number, m:number) => new Date(y, m, 1).getDay();
+
+        const prevMonth = () => { const d = new Date(pickerDate); d.setMonth(d.getMonth() - 1); setPickerDate(d); setView('calendar'); };
+        const nextMonth = () => { const d = new Date(pickerDate); d.setMonth(d.getMonth() + 1); setPickerDate(d); setView('calendar'); };
+
+        const renderDays = () => {
+            const y = pickerDate.getFullYear();
+            const m = pickerDate.getMonth();
+            const total = daysInMonth(y, m);
+            const first = firstWeekdayOfMonth(y, m);
+            const cells: React.ReactNode[] = [];
+            for (let i = 0; i < first; i++) cells.push(<View key={'b' + i} style={[styles.dayCell]} />);
+            for (let d = 1; d <= total; d++) {
+                const isSelected = formatDateLocal(new Date(y, m, d)) === isoDate;
+                cells.push(
+                    <TouchableOpacity key={d} onPress={() => {
+                        const selected = new Date(y, m, d);
+                        setDate(selected);
+                        setEditingDate(formatDateLocal(selected));
+                        setShowDatePicker(false);
+                    }} style={[styles.dayCell, isSelected ? styles.dayCellSelected : undefined]}>
+                        <Text style={[styles.dayText, isSelected ? styles.dayTextSelected : undefined]}>{String(d)}</Text>
+                    </TouchableOpacity>
+                );
+            }
+            return (<View style={styles.daysGrid}>{cells}</View>);
+        };
+
+        const renderWeekdays = () => {
+            const names = ['S','M','T','W','T','F','S'];
+            return (
+                <View style={styles.weekdayRow}>
+                    {names.map((n, i) => (
+                        <Text key={i} style={styles.weekdayCell}>{n}</Text>
+                    ))}
+                </View>
+            );
+        };
+
+        const renderMonths = () => (
+            <View>
+                <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8}}>
+                    <Text style={styles.label}>{t('selectMonth') || 'Select month'}</Text>
+                </View>
+                <View style={styles.monthGrid}>
+                    {monthNames.map((mn, idx) => {
+                        const isSel = pickerDate.getMonth() === idx;
+                        return (
+                            <TouchableOpacity key={idx} style={[styles.monthCell, isSel ? styles.monthCellSelected : undefined]}
+                                              onPress={() => { const d = new Date(pickerDate); d.setMonth(idx); setPickerDate(d); setView('calendar'); }}>
+                                <Text style={isSel ? styles.monthTextSelected : undefined}>{mn.substr(0,3)}</Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </View>
+            </View>
+        );
+
+        const renderYears = () => {
+            const center = pickerDate.getFullYear();
+            const start = center - 6;
+            const years: number[] = [];
+            for (let y = start; y < start + 15; y++) years.push(y);
+            return (
+                <View>
+                    <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8}}>
+                        <Text style={styles.label}>{t('selectYear') || 'Select year'}</Text>
+                    </View>
+                    <View style={styles.yearGrid}>
+                        {years.map((y) => (
+                            <TouchableOpacity key={y} style={[styles.yearCell, y === pickerDate.getFullYear() ? styles.monthCellSelected : undefined]}
+                                              onPress={() => { const d = new Date(pickerDate); d.setFullYear(y); setPickerDate(d); setView('calendar'); }}>
+                                <Text style={y === pickerDate.getFullYear() ? styles.monthTextSelected : undefined}>{String(y)}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                </View>
+            );
+        };
+
+        return (
+            <View>
+                <View style={styles.calendarHeader}>
+                    <TouchableOpacity onPress={prevMonth} style={styles.monthNavBtn} accessibilityLabel={t('previousMonth') || 'Previous month'}>
+                        <MaterialIcons name={isRTL ? 'chevron-right' : 'chevron-left'} size={24} color="#333" />
+                    </TouchableOpacity>
+                    <View style={{flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center'}}>
+                        <TouchableOpacity onPress={() => setView('months')}>
+                            <Text style={styles.monthYearTitle}>{monthNames[pickerDate.getMonth()]}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => setView('years')} style={{marginLeft: 8}}>
+                            <Text style={styles.label}>{pickerDate.getFullYear()}</Text>
+                        </TouchableOpacity>
+                    </View>
+                    <TouchableOpacity onPress={nextMonth} style={styles.monthNavBtn} accessibilityLabel={t('nextMonth') || 'Next month'}>
+                        <MaterialIcons name={isRTL ? 'chevron-left' : 'chevron-right'} size={24} color="#333" />
+                    </TouchableOpacity>
+                </View>
+
+                {view === 'calendar' && (
+                    <View>
+                        {renderWeekdays()}
+                        {renderDays()}
+                    </View>
+                )}
+                {view === 'months' && renderMonths()}
+                {view === 'years' && renderYears()}
+
+                <View style={{flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12}}>
+                    <TouchableOpacity style={[styles.smallBtn, {marginRight: 8}]} onPress={() => {
+                        const edt = parseISODate(editingDate);
+                        const d = edt ?? new Date(pickerDate.getFullYear(), pickerDate.getMonth(), 1);
+                        setDate(d);
+                        setEditingDate(formatDateLocal(d));
+                        setShowDatePicker(false);
+                    }}>
+                        <Text style={{color: 'white'}}>{t('set') || 'Set'}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.smallBtn, {backgroundColor: '#777'}]} onPress={() => setShowDatePicker(false)}>
+                        <Text style={{color: 'white'}}>{t('cancel') || 'Cancel'}</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        );
+    }
 
     return (
         <KeyboardAvoidingView
@@ -565,6 +685,14 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         marginBottom: 16,
         elevation: 1,
+        justifyContent: "flex-start"
+    },
+    staticTaskCard: {
+        backgroundColor: '#fff',
+        padding: 12,
+        borderRadius: 8,
+        marginBottom: 6,
+        elevation: 1,
     },
     datePicker: {
         width: '100%',
@@ -653,12 +781,83 @@ const styles = StyleSheet.create({
         borderRadius: 6,
         backgroundColor: '#fafafa',
     },
-    staticTaskCard: {
-        backgroundColor: '#ffffff',
-        borderRadius: 6,
-        padding: 10,
+    /* Calendar styles */
+    calendarHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    monthNavBtn: {
+        padding: 8,
+    },
+    monthYearTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    weekdayRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 6,
+    },
+    weekdayCell: {
+        width: 32,
+        textAlign: 'center',
+        color: '#666',
+    },
+    daysGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+    },
+    dayCell: {
+        width: 32,
+        height: 32,
+        margin: 4,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 4,
+    },
+    dayText: {
+        color: '#222',
+    },
+    dayCellSelected: {
+        backgroundColor: '#2196F3',
+    },
+    dayTextSelected: {
+        color: 'white',
+        fontWeight: '600',
+    },
+    monthGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+    },
+    monthCell: {
+        width: '30%',
+        padding: 8,
         marginVertical: 6,
-        borderWidth: 1,
-        borderColor: '#eee',
+        alignItems: 'center',
+        borderRadius: 6,
+        backgroundColor: '#fafafa',
+    },
+    monthCellSelected: {
+        backgroundColor: '#2196F3',
+    },
+    monthTextSelected: {
+        color: 'white',
+    },
+    yearGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+    },
+    yearCell: {
+        width: '30%',
+        padding: 8,
+        marginVertical: 6,
+        alignItems: 'center',
+        borderRadius: 6,
+        backgroundColor: '#fafafa',
     },
 });
+

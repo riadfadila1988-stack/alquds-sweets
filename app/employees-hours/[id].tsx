@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, I18nManager } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useTranslation } from '@/app/_i18n';
 import { useEmployeeMonthlyDetails } from '@/hooks/use-employee-monthly-details';
@@ -31,7 +31,7 @@ export default function EmployeeMonthDetail() {
 
   const sortedSessions = useMemo(() => (sessions || []).slice().sort((a, b) => new Date(a.clockIn).getTime() - new Date(b.clockIn).getTime()), [sessions]);
 
-  const isRTL = I18nManager.isRTL;
+  const isRTL = true;
 
   return (
     <View style={styles.container}>

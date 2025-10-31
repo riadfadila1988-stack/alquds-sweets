@@ -33,7 +33,7 @@ export default function TaskGroupsScreen() {
           data={taskGroups}
           keyExtractor={(item) => item._id}
           renderItem={({ item }) => (
-            <Link href={`./task-groups/${item._id}`} asChild>
+            <Link style={{flexDirection: 'row-reverse'}} href={`./task-groups/${item._id}`} asChild>
               <TouchableOpacity onLongPress={() => confirmDelete(item._id, item.name)} style={styles.itemContainer}>
                 <Text style={styles.itemText}>{item.name}</Text>
               </TouchableOpacity>
@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
   },
   addBtn: {
     position: 'absolute',
-    right: 20,
+    left: 20,
     bottom: 24,
     width: 56,
     height: 56,

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Alert, RefreshControl, I18nManager } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Alert, RefreshControl } from 'react-native';
 import { useMaterials } from '@/hooks/use-materials';
 import { useAuth } from '@/hooks/use-auth';
 import Header from './components/header';
@@ -15,8 +15,8 @@ export default function UpdateMaterialQuantityScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Detect RTL at runtime and adjust inline layout/styles accordingly
-  const isRTL = I18nManager.isRTL;
+  // App always RTL
+  const isRTL = true;
 
   // Initialize local edit values from materials
   useEffect(() => {

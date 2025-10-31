@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, FlatList, Pressable, Platform, I18nManager } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, FlatList, Pressable, Platform } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useMaterials } from '@/hooks/use-materials';
 import { IUsedMaterial } from '@/types/task-group';
@@ -14,7 +14,7 @@ interface TaskProps {
 
 export default function Task({ task, onChange, onRemove }: TaskProps) {
   const { t } = useTranslation();
-  const isRTL = I18nManager.isRTL;
+  const isRTL = true;
   const { materials } = useMaterials();
   const [descHeight, setDescHeight] = React.useState<number>(100);
   // Refs used to force focus when parent touchables/gestures intercept taps
@@ -170,10 +170,10 @@ export default function Task({ task, onChange, onRemove }: TaskProps) {
 
         <View style={styles.headerRowSmall}>
           <View style={styles.headerLeft}>
+            <Text style={[styles.label, isRTL && styles.labelRtl]}>{t('usedMaterials') || 'Used Materials'}</Text>
             <TouchableOpacity onPress={toggleMaterialsCollapsed} style={[styles.collapseButton, isRTL && styles.collapseButtonRtl]}>
               <MaterialIcons name={materialsCollapsed ? 'expand-more' : 'expand-less'} size={20} color="#333" style={isRTL ? { transform: [{ scaleX: -1 }] } : undefined} />
             </TouchableOpacity>
-            <Text style={[styles.label, isRTL && styles.labelRtl]}>{t('usedMaterials') || 'Used Materials'}</Text>
           </View>
           <TouchableOpacity style={styles.iconButtonSmall} onPress={addMaterialToTask}>
             <MaterialIcons name="add" size={20} color="#007AFF" style={isRTL ? { transform: [{ scaleX: -1 }] } : undefined} />
@@ -216,10 +216,10 @@ export default function Task({ task, onChange, onRemove }: TaskProps) {
 
         <View style={[styles.headerRowSmall, { marginTop: 12 }]}>
           <View style={styles.headerLeft}>
+            <Text style={[styles.label, isRTL && styles.labelRtl]}>{t('producedMaterials') || 'Produced Materials'}</Text>
             <TouchableOpacity onPress={toggleProducedCollapsed} style={[styles.collapseButton, isRTL && styles.collapseButtonRtl]}>
               <MaterialIcons name={producedCollapsed ? 'expand-more' : 'expand-less'} size={20} color="#333" style={isRTL ? { transform: [{ scaleX: -1 }] } : undefined} />
             </TouchableOpacity>
-            <Text style={[styles.label, isRTL && styles.labelRtl]}>{t('producedMaterials') || 'Produced Materials'}</Text>
           </View>
           <TouchableOpacity style={styles.iconButtonSmall} onPress={addProducedMaterialToTask}>
             <MaterialIcons name="add" size={20} color="#007AFF" style={isRTL ? { transform: [{ scaleX: -1 }] } : undefined} />
@@ -320,7 +320,7 @@ const styles = StyleSheet.create({
   textareaRtl: { textAlign: 'right' },
   clearButton: { position: 'absolute', top: -10, left: -10, width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#eee' },
   clearButtonRtl: { left: undefined, right: -10 },
-  headerRowSmall: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
+  headerRowSmall: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
   headerLeft: { flexDirection: 'row', alignItems: 'center' },
   collapseButton: { marginRight: 8 },
   collapseButtonRtl: { marginRight: 0, marginLeft: 8 },

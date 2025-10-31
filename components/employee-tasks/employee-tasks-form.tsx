@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, I18nManager, KeyboardAvoidingView, Platform, Modal, FlatList, Keyboard, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Modal, FlatList, Keyboard, ActivityIndicator } from 'react-native';
 import { useTranslation } from '@/app/_i18n';
 import { MaterialIcons } from '@expo/vector-icons';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -20,7 +20,7 @@ interface EmployeeTasksFormProps {
 
 export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose, isSaving = false, employeeName, taskGroups = [], date }: EmployeeTasksFormProps) {
   const { t } = useTranslation();
-  const isRTL = I18nManager.isRTL;
+  const isRTL = true;
   const nextIdRef = useRef<number>(0);
   const makeKey = () => `task-${Date.now()}-${(nextIdRef.current++).toString(36)}`;
 

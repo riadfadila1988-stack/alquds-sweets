@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, I18nManager, Modal, Pressable, TextInput, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Modal, Pressable, TextInput, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from './_i18n';
 import { useEmployeesHours } from '@/hooks/use-employees-hours';
@@ -24,7 +24,7 @@ export default function EmployeesHoursScreen() {
   // compute number of days in the selected month (cursor.m is 1-based)
   const daysInMonth = new Date(cursor.y, cursor.m, 0).getDate();
 
-  const isRTL = I18nManager.isRTL;
+  const isRTL = true;
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
   const maxPastYears = 10; // show past 10 years + current year

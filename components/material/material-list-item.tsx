@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, I18nManager } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { IMaterial } from '@/types/material';
 import { useTranslation } from '@/app/_i18n';
 
@@ -13,7 +13,7 @@ export default function MaterialListItem({ item, onPress, onLongPress }: { item:
   const createdLabel = item.createdAt ? new Date(item.createdAt).toLocaleDateString() : undefined;
 
   // detect RTL from react-native
-  const isRTL = I18nManager.isRTL;
+  const isRTL = true;
 
   // dynamic styles that depend on RTL
   const rowStyle = [styles.row, isRTL ? styles.rowReverse : null];

@@ -1,4 +1,4 @@
-import { I18nManager, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const RTL_STORAGE_KEY = '@app:rtl_enabled';
@@ -13,27 +13,15 @@ const RTL_STORAGE_KEY = '@app:rtl_enabled';
  */
 export const initializeRTL = () => {
   try {
-    // Check if RTL was already enabled from a previous build
-    const wasRTLEnabled = I18nManager.isRTL;
-
-    // Force RTL to be enabled
-    I18nManager.allowRTL(true);
-    I18nManager.forceRTL(true);
-
-    // Web-specific RTL setup
+    // Do not modify native I18nManager at runtime here per app policy.
+    // For web, ensure DOM direction is set to RTL so the page renders correctly.
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       document.documentElement.setAttribute('dir', 'rtl');
       document.documentElement.setAttribute('lang', 'ar');
       document.body.style.direction = 'rtl';
     }
 
-    console.log('[RTL] Initialized - isRTL:', I18nManager.isRTL, 'Platform:', Platform.OS);
-
-    // iOS-specific warning
-    if (Platform.OS === 'ios' && !I18nManager.isRTL && !wasRTLEnabled) {
-      console.warn('[RTL] ⚠️ iOS detected: forceRTL called but not active yet. A native rebuild is required.');
-      console.warn('[RTL] Run: npx expo prebuild --clean && npx expo run:ios');
-    }
+    console.log('[RTL] Initialized (no native changes) - Platform:', Platform.OS);
   } catch (error) {
     console.error('[RTL] Failed to initialize:', error);
   }
@@ -45,43 +33,15 @@ export const initializeRTL = () => {
  */
 export const ensureRTL = async (): Promise<boolean> => {
   try {
-    const shouldBeRTL = true; // Your app always uses RTL for Arabic
-
-    // Store the desired RTL state
+    // ensureRTL just sets web DOM direction and persists a preference locally
+    const shouldBeRTL = true;
     await AsyncStorage.setItem(RTL_STORAGE_KEY, String(shouldBeRTL));
-
-    // Web platform - just set DOM attributes
-    if (Platform.OS === 'web') {
-      if (typeof document !== 'undefined') {
-        document.documentElement.setAttribute('dir', 'rtl');
-        document.documentElement.setAttribute('lang', 'ar');
-        document.body.style.direction = 'rtl';
-      }
-      return false;
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      document.documentElement.setAttribute('dir', 'rtl');
+      document.documentElement.setAttribute('lang', 'ar');
+      document.body.style.direction = 'rtl';
     }
-
-    // Check if current state matches desired state
-    if (I18nManager.isRTL !== shouldBeRTL) {
-      console.log('[RTL] State mismatch. Current:', I18nManager.isRTL, 'Desired:', shouldBeRTL);
-
-      I18nManager.allowRTL(shouldBeRTL);
-      I18nManager.forceRTL(shouldBeRTL);
-
-      if (Platform.OS === 'android') {
-        // On Android, we need to reload for changes to take effect
-        try {
-          const Updates = await import('expo-updates');
-          if (Updates.reloadAsync) {
-            console.log('[RTL] Triggering reload to apply RTL...');
-            await Updates.reloadAsync();
-            return true;
-          }
-        } catch (e) {
-          console.warn('[RTL] expo-updates not available:', e);
-        }
-      }
-    }
-
+    // We intentionally do not call I18nManager.forceRTL here to avoid native reloads.
     return false;
   } catch (error) {
     console.error('[RTL] Error ensuring RTL:', error);
@@ -101,4 +61,3 @@ export const getStoredRTLPreference = async (): Promise<boolean> => {
     return true; // Default to RTL for Arabic app
   }
 };
-

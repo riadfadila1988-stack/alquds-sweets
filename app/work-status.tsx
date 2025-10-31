@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Pressable, I18nManager } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Pressable } from 'react-native';
 import Header from './components/header';
 import { useWorkDayPlan } from '@/hooks/use-work-day-plan';
 import { getHistory as getAttendanceHistory } from '@/services/employee-attendance';
@@ -9,6 +9,7 @@ import { getUsers } from '@/services/user';
 import { useTranslation } from './_i18n';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import Timer from './components/timer';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 
 function formatDurationMinutes(minutes: number | undefined) {
   if (minutes == null || isNaN(minutes)) return '--';
@@ -80,9 +81,9 @@ export default function WorkStatusScreen() {
   const backgroundColor = useThemeColor({}, 'background');
   const textColor = useThemeColor({}, 'text');
 
-  // RTL support
-  const isRTL = I18nManager.isRTL;
-  const rtlText: any = { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' };
+  // RTL is always true per app configuration
+  const isRTL = true;
+  const rtlText: any = { textAlign: 'right', writingDirection: 'rtl' };
 
   // theme colors used to compute task card backgrounds/badges (similar to TodayTasks screen)
   const successBg = useThemeColor({}, 'success');
@@ -323,8 +324,10 @@ export default function WorkStatusScreen() {
                       </View>
 
                       <View style={[styles.row, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-                        <Text style={[styles.label, rtlText]}>{t('elapsed') || 'Elapsed'}:</Text>
-                        <Text style={[styles.value, { color: textColor }, rtlText]}>{formatDurationMinutes(e.elapsedMinutes)}</Text>
+                        <View style={{ flexDirection:  'row' , alignItems: 'center', gap: '5' }}>
+                          <Text style={[styles.value, { color: textColor }, rtlText]}>{formatDurationMinutes(e.elapsedMinutes)}</Text>
+                          <IconSymbol name="clock" size={16} color={textColor} style={{ marginEnd: 8 }} />
+                        </View>
                       </View>
                     </>
                   ) : null}
@@ -373,7 +376,10 @@ export default function WorkStatusScreen() {
                                  resetKey={String(getTaskStart(task))}
                                />
                              ) : (
-                              <Text style={[styles.meta, { color: textColor }, rtlText]}>{'Elapsed: '}{isFinished ? formatDurationMinutes(getTaskDurationMinutes(task) ?? undefined) : '00:00:00'}</Text>
+                              <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center' }}>
+                                <IconSymbol name="clock.fill" size={14} color={textColor} style={{ marginEnd: 8 }} />
+                                <Text style={[styles.meta, { color: textColor }, rtlText]}>{isFinished ? formatDurationMinutes(getTaskDurationMinutes(task) ?? undefined) : '00:00:00'}</Text>
+                              </View>
                              )}
 
                             {task.description ? <Text style={[styles.description, { color: textColor }, rtlText]}>{task.description}</Text> : null}

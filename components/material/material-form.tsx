@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, View, Text, TextInput, Button, StyleSheet, ActivityIndicator, TouchableOpacity, I18nManager, KeyboardAvoidingView, Platform, ScrollView, Keyboard, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, KeyboardAvoidingView, TouchableWithoutFeedback, Keyboard, ScrollView, ActivityIndicator, Platform } from 'react-native';
 import { IMaterial } from '@/types/material';
 import { useTranslation } from '@/app/_i18n';
 
@@ -28,7 +28,7 @@ export default function MaterialForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isRTL = I18nManager.isRTL;
+  const isRTL = true;
 
   // Populate fields when initialData changes (edit mode)
   React.useEffect(() => {
@@ -151,8 +151,12 @@ export default function MaterialForm({
                   <ActivityIndicator size="small" />
                 ) : (
                   <View style={[styles.buttons, isRTL ? styles.buttonsRTL : styles.buttonsLTR]}>
-                    <Button title={t('cancel')} onPress={() => { reset(); onClose(); }} />
-                    <Button title={initialData ? t('save') : t('add')} onPress={handleSubmit} />
+                    <TouchableOpacity style={[styles.modalActionBtn, { backgroundColor: '#777' }]} onPress={() => { reset(); onClose(); }}>
+                      <Text style={styles.modalActionText}>{t('cancel')}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.modalActionBtn, { backgroundColor: '#007AFF' }]} onPress={handleSubmit}>
+                      <Text style={styles.modalActionText}>{initialData ? t('save') : t('add')}</Text>
+                    </TouchableOpacity>
                   </View>
                 )}
               </View>
@@ -185,4 +189,16 @@ const styles = StyleSheet.create({
   // RTL/LTR text helpers
   rtlText: { textAlign: 'right', writingDirection: 'rtl' },
   ltrText: { textAlign: 'left', writingDirection: 'ltr' },
+  modalActionBtn: {
+    flex: 1,
+    borderRadius: 6,
+    paddingVertical: 12,
+    marginHorizontal: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalActionText: {
+    color: '#fff',
+    fontWeight: '500',
+  },
 });

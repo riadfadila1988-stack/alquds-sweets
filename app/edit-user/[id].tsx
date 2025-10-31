@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, I18nManager, KeyboardAvoidingView, Platform, ScrollView, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { useTranslation } from '../_i18n';
 import Header from '../components/header';
 import { getUser, updateUser } from '@/services/user';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 
-const isRTL = I18nManager.isRTL;
+const isRTL = true;
 
 export default function EditUserScreen() {
   const { t } = useTranslation();

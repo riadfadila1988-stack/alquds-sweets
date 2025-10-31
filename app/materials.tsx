@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, I18nManager } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import MaterialListItem from '@/components/material/material-list-item';
 import MaterialForm from '@/components/material/material-form';
 import { useMaterials } from '@/hooks/use-materials';
@@ -14,8 +14,8 @@ export default function MaterialsScreen() {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedMaterial, setSelectedMaterial] = useState<any | null>(null);
 
-  // detect RTL and adjust some layout bits
-  const isRTL = I18nManager.isRTL;
+  // RTL forced on
+  const isRTL = true;
 
   const handleCreate = async (data: any) => {
     return create(data);

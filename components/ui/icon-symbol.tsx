@@ -18,6 +18,9 @@ const MAPPING = {
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
+  // Clock / time icons
+  'clock': 'access-time',
+  'clock.fill': 'access-time',
 } as IconMapping;
 
 /**

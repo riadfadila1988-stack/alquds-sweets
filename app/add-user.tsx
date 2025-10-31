@@ -2,16 +2,15 @@ import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
-  TextInput,
-  TouchableOpacity,
   StyleSheet,
-  Alert,
+  TouchableOpacity,
   ActivityIndicator,
-  I18nManager,
+  Alert,
+  TextInput,
   KeyboardAvoidingView,
-  Platform,
-  Keyboard,
   TouchableWithoutFeedback,
+  Keyboard,
+  Platform,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { addUser } from '@/services/user';
@@ -27,7 +26,7 @@ interface UserForm {
   active: boolean;
 }
 
-const isRTL = I18nManager.isRTL;
+const isRTL = true;
 
 export default function AddUserScreen() {
   const { t } = useTranslation();

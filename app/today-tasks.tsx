@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, Modal, TextInput, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard, I18nManager } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, Modal, TextInput, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { useAuth } from '@/hooks/use-auth';
 import { useWorkDayPlan } from '@/hooks/use-work-day-plan';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -17,7 +17,7 @@ const dbg = (...args: any[]) => {
 
 export default function TodayTasksScreen() {
   const { t } = useTranslation();
-  const isRTL = I18nManager.isRTL;
+  const isRTL = true;
 
   // intentionally using plain strings to avoid strict typed translation keys
 

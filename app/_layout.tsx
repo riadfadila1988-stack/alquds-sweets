@@ -1,45 +1,29 @@
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import React, { useEffect, useMemo, useState } from 'react';
-import { I18nManager, Platform, View, StyleSheet, Alert, Text } from 'react-native';
+import React, { useEffect, useMemo } from 'react';
+import { Platform, View, StyleSheet } from 'react-native';
 import { Slot } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { initializeRTL, ensureRTL } from '../utils/rtl';
+import { initializeRTL, ensureRTL } from '@/utils/rtl';
 
 // CRITICAL: Initialize RTL at module level BEFORE any components render
 // This runs every time the module loads (including app restarts)
 initializeRTL();
 
 export default function RootLayout() {
-  const [needsRestart, setNeedsRestart] = useState(false);
-
   useEffect(() => {
     const setupRTL = async () => {
       try {
-        console.log('[RTL-CHECK] Verifying RTL setup...');
-        console.log('[RTL-CHECK] Current I18nManager.isRTL:', I18nManager.isRTL);
-        console.log('[RTL-CHECK] Platform:', Platform.OS);
+        // This app enforces RTL layout. We no longer query native I18nManager at runtime.
+        const isRTL = true;
+        console.log('[RTL-CHECK] Enforcing RTL at runtime. isRTL:', isRTL, 'Platform:', Platform.OS);
 
-        // Ensure RTL is properly set and reload if needed
-        const reloadTriggered = await ensureRTL();
+        // Ensure web DOM dir is set and persist preference if necessary
+        await ensureRTL();
 
-        if (!I18nManager.isRTL && !reloadTriggered) {
-          // If RTL is still not active and we didn't trigger a reload
-          if (Platform.OS === 'ios') {
-            console.warn('[RTL-CHECK] ⚠️ RTL not active on iOS - manual restart required');
-            setNeedsRestart(true);
-            setTimeout(() => {
-              Alert.alert(
-                'إعادة تشغيل مطلوبة / Restart Required',
-                'يرجى إغلاق التطبيق تمامًا وإعادة فتحه لتطبيق الاتجاه من اليمين إلى اليسار.\n\nPlease completely close the app and reopen it to apply RTL layout.\n\niOS: Double tap home button or swipe up, then swipe app away.',
-                [{ text: 'موافق / OK' }]
-              );
-            }, 1000);
-          } else {
-            console.warn('[RTL-CHECK] ⚠️ RTL not active - please restart the app');
-          }
-        } else {
-          console.log('[RTL-CHECK] ✅ RTL is properly configured!');
+        // On iOS native-level RTL may require a rebuild. Informational only.
+        if (Platform.OS === 'ios') {
+          console.log('[RTL-CHECK] iOS detected: native RTL may require a rebuild for some effects.');
         }
       } catch (error) {
         console.error('[RTL-CHECK] Error during RTL setup:', error);
@@ -51,21 +35,7 @@ export default function RootLayout() {
 
   const queryClient = useMemo(() => new QueryClient(), []);
 
-  // Show restart warning if needed
-  if (needsRestart && Platform.OS === 'ios') {
-    return (
-      <View style={[styles.root, styles.centerContent]}>
-        <Text style={styles.warningTitle}>⚠️ إعادة تشغيل مطلوبة</Text>
-        <Text style={styles.warningTitle}>⚠️ Restart Required</Text>
-        <Text style={styles.warningText}>
-          {'يرجى إغلاق التطبيق تمامًا وإعادة فتحه\n'}
-          {'Please completely close and reopen the app\n\n'}
-          {'iOS: Double tap home → Swipe app away → Relaunch'}
-        </Text>
-      </View>
-    );
-  }
-
+  // No restart UI required; app enforces RTL in JS and web DOM.
   // Apply root container with proper RTL support
   // RTL layout direction is controlled by I18nManager.forceRTL()
   return (

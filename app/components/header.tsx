@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, I18nManager } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +18,8 @@ export default function Header({ title, titleKey, subtitle, showBack = true, onB
   const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  // App is always RTL — hardcode to simplify components
+  const isRTL = true;
 
   const handleBack = () => {
     if (onBack) return onBack();
@@ -31,10 +33,14 @@ export default function Header({ title, titleKey, subtitle, showBack = true, onB
   return (
     <View style={[styles.container, { paddingTop: insets.top || 12 }]}>
       <View style={styles.row}>
-        {showBack ? (
-          <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('back') || 'Back'} onPress={handleBack} style={styles.backBtn}>
-            <Ionicons name="chevron-forward" size={28} color="#007AFF" style={{ transform: [{ scaleX: I18nManager.isRTL ? -1 : 1 }] }} />
-          </TouchableOpacity>
+        {!isRTL ? (
+          showBack ? (
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('back') || 'Back'} onPress={handleBack} style={styles.backBtn}>
+              <Ionicons name="chevron-back" size={28} color="#007AFF" style={{ transform: [{ scaleX: isRTL ? -1 : 1 }] }} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.backBtnPlaceholder} />
+          )
         ) : (
           <View style={styles.backBtnPlaceholder} />
         )}
@@ -45,7 +51,15 @@ export default function Header({ title, titleKey, subtitle, showBack = true, onB
           {subtitle ? <Text numberOfLines={1} style={styles.subtitle}>{subtitle}</Text> : null}
         </View>
 
-        <View style={styles.rightWrap}>{right ?? <View style={styles.rightPlaceholder} />}</View>
+        <View style={styles.rightWrap}>
+          {/* In RTL move the back button to the right side */}
+          {isRTL && showBack ? (
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('back') || 'Back'} onPress={handleBack} style={styles.backBtn}>
+              <Ionicons name="chevron-back" size={28} color="#007AFF" style={{ transform: [{ scaleX: isRTL ? -1 : 1 }] }} />
+            </TouchableOpacity>
+          ) : null}
+          {right ?? <View style={styles.rightPlaceholder} />}
+        </View>
       </View>
     </View>
   );

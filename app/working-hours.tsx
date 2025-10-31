@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, I18nManager } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import * as Location from 'expo-location';
 import { useTranslation } from './_i18n';
 import { useWorkingHours } from '@/hooks/use-working-hours';
@@ -8,8 +8,8 @@ import Header from './components/header';
 
 export default function WorkingHoursScreen() {
   const { t } = useTranslation();
-  const isRTL = I18nManager.isRTL;
-  const rtlTextAlign: 'left' | 'right' = isRTL ? 'right' : 'left';
+  const isRTL = true;
+  const rtlTextAlign: 'left' | 'right' = 'right';
   const {
     currentSession,
     todaySessions,
