@@ -29,13 +29,12 @@ export default function NewTaskGroupScreen() {
   return (
     <View style={styles.container}>
       <Header title={t('newTaskGroup') || 'New Task Group'} />
-      {isSaving ? (
-        <View style={styles.center}>
+      <TaskGroupForm onSubmit={handleSubmit} onClose={() => router.back()} isSaving={isSaving} />
+      {isSaving && (
+        <View style={styles.centerOverlay} pointerEvents="none">
           <ActivityIndicator size="large" />
-          <Text style={{ marginTop: 12 }}>{t('loading') || 'Saving...'}</Text>
+          <Text style={{ marginTop: 12 }}>{t('saving') || 'Saving...'}</Text>
         </View>
-      ) : (
-        <TaskGroupForm onSubmit={handleSubmit} onClose={() => router.back()} />
       )}
     </View>
   );
@@ -44,4 +43,5 @@ export default function NewTaskGroupScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  centerOverlay: { position: 'absolute', left: 0, right: 0, top: 60, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.6)' },
 });

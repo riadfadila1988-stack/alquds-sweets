@@ -1,6 +1,6 @@
-import {Text, View, StyleSheet, TouchableOpacity, Modal, ActivityIndicator, Button, FlatList} from "react-native";
+import {Text, View, StyleSheet, TouchableOpacity, Modal, ActivityIndicator, Button, FlatList, Alert} from "react-native";
 import { useState } from "react";
-import {Link} from "expo-router";
+import {Link, useRouter} from "expo-router";
 import { useTranslation } from './_i18n';
 import { useNotifications } from '@/hooks/use-notifications';
 import { useAuth } from '@/hooks/use-auth';
@@ -9,9 +9,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function AdminScreen() {
     const {t} = useTranslation();
+    const router = useRouter();
     const [isNotifVisible, setIsNotifVisible] = useState(false);
     const { notifications, isLoading: notifLoading, markRead, markAll, refetch: refetchNotifs } = useNotifications();
-    const { user } = useAuth();
+    const { user, logout } = useAuth();
 
     const unreadCount = (notifications || []).filter((n) => !n.read).length;
     return (
@@ -20,12 +21,24 @@ export default function AdminScreen() {
               title={t('admin') || 'Admin Dashboard'}
               showBack={false}
               right={
-                user?.role === 'admin' ? (
-                  <TouchableOpacity onPress={() => { setIsNotifVisible(true); refetchNotifs(); }} style={{ padding: 6 }}>
-                    <Text style={styles.notifIcon}>🔔</Text>
-                    {unreadCount > 0 && <View style={styles.unreadBadge}><Text style={styles.unreadText}>{unreadCount}</Text></View>}
+                // show notification icon (for admins) and a logout button side-by-side
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  {user?.role === 'admin' ? (
+                    <TouchableOpacity onPress={() => { setIsNotifVisible(true); refetchNotifs(); }} style={{ padding: 6, marginRight: 8 }}>
+                      <Text style={styles.notifIcon}>🔔</Text>
+                      {unreadCount > 0 && <View style={styles.unreadBadge}><Text style={styles.unreadText}>{unreadCount}</Text></View>}
+                    </TouchableOpacity>
+                  ) : null}
+
+                  <TouchableOpacity accessibilityRole="button" onPress={() => {
+                    Alert.alert(t('logout') || 'Logout', t('confirmLogout') || 'Are you sure you want to logout?', [
+                      { text: t('cancel') || 'Cancel', style: 'cancel' },
+                      { text: t('logout') || 'Logout', style: 'destructive', onPress: async () => { await logout(); router.replace('/'); } }
+                    ]);
+                  }} style={{ padding: 6 }}>
+                    <Text style={[styles.logoutText]}>⎋</Text>
                   </TouchableOpacity>
-                ) : null
+                </View>
               }
             />
             <View style={styles.menu}>
@@ -133,4 +146,5 @@ const styles = StyleSheet.create({
     modalContainer: { height: '75%', width: '92%', maxWidth: 720, backgroundColor: '#fff', borderRadius: 12, padding: 12, overflow: 'hidden' },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 6, paddingVertical: 8 },
     modalTitle: { fontSize: 18, fontWeight: '600' },
+    logoutText: { fontSize: 18, color: '#333' },
 });

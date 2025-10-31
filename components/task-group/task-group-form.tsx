@@ -9,9 +9,10 @@ interface TaskGroupFormProps {
   initialData?: ITaskGroup;
   onSubmit: (data: Partial<ITaskGroup>) => void;
   onClose: () => void;
+  isSaving?: boolean; // added: allow parent to tell form it's saving so we don't unmount it
 }
 
-export default function TaskGroupForm({ initialData, onSubmit, onClose }: TaskGroupFormProps) {
+export default function TaskGroupForm({ initialData, onSubmit, onClose, isSaving = false }: TaskGroupFormProps) {
   const { t } = useTranslation();
   // detect RTL from React Native's I18nManager
   const isRTL = I18nManager.isRTL;
@@ -96,7 +97,7 @@ export default function TaskGroupForm({ initialData, onSubmit, onClose }: TaskGr
           ))}
 
           <View style={[styles.buttonContainer, isRTL && styles.buttonContainerRtl]}>
-             <Button  title={t('submit') || 'Submit'} onPress={handleSubmit} />
+             <Button  title={isSaving ? (t('saving') || 'Saving...') : (t('submit') || 'Submit')} onPress={handleSubmit} disabled={isSaving} />
              <Button title={t('cancel') || 'Cancel'} onPress={onClose} color="red" />
            </View>
          </ScrollView>

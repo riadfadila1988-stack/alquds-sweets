@@ -93,13 +93,12 @@ export default function EditTaskGroupScreen() {
   return (
     <View style={styles.container}>
       <Header title={taskGroup.name || t('taskGroup') || 'Task Group'} />
-      {isSaving ? (
-        <View style={styles.center}>
+      <TaskGroupForm initialData={taskGroup} onSubmit={handleSubmit} onClose={() => router.back()} isSaving={isSaving} />
+      {isSaving && (
+        <View style={styles.centerOverlay} pointerEvents="none">
           <ActivityIndicator size="large" />
-          <Text style={{ marginTop: 12 }}>{t('loading') || 'Saving...'}</Text>
+          <Text style={{ marginTop: 12 }}>{t('saving') || 'Saving...'}</Text>
         </View>
-      ) : (
-        <TaskGroupForm initialData={taskGroup} onSubmit={handleSubmit} onClose={() => router.back()} />
       )}
     </View>
   );
@@ -110,4 +109,5 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   errorText: { color: 'red', textAlign: 'center', marginTop: 20 },
   empty: { textAlign: 'center', color: '#666', marginTop: 24 },
+  centerOverlay: { position: 'absolute', left: 0, right: 0, top: 60, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.6)' },
 });

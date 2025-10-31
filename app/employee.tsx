@@ -1,14 +1,27 @@
 import React from 'react';
-import {View, Text, StyleSheet, TouchableOpacity, ScrollView} from 'react-native';
+import {View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert} from 'react-native';
 import {useTranslation} from './_i18n';
 import {Link} from 'expo-router';
 import Header from './components/header';
+import { useAuth } from '@/hooks/use-auth';
+import { useRouter } from 'expo-router';
 
 export default function EmployeeScreen() {
     const {t} = useTranslation();
+    const { logout } = useAuth();
+    const router = useRouter();
     return (
         <View style={styles.screen}>
-            <Header title={t('employeeDashboard') || 'Employee'} showBack={false}/>
+            <Header title={t('employeeDashboard') || 'Employee'} showBack={false} right={
+                <TouchableOpacity accessibilityRole="button" onPress={() => {
+                    Alert.alert(t('logout') || 'Logout', t('confirmLogout') || 'Are you sure you want to logout?', [
+                        { text: t('cancel') || 'Cancel', style: 'cancel' },
+                        { text: t('logout') || 'Logout', style: 'destructive', onPress: async () => { await logout(); router.replace('/'); } }
+                    ]);
+                }}>
+                    <Text style={{ fontSize: 18, padding: 6 }}>⎋</Text>
+                </TouchableOpacity>
+            }/>
 
             <ScrollView contentContainerStyle={styles.container}>
                 <View style={styles.menu}>
