@@ -168,8 +168,7 @@ export default function PlanWorkDayScreen() {
                             if (m) {
                                 const hh = Number(m[1]);
                                 const mm = Number(m[2]);
-                                const base = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hh, mm, 0, 0);
-                                return base;
+                                return new Date(date.getFullYear(), date.getMonth(), date.getDate(), hh, mm, 0, 0);
                             }
                         }
                         if (typeof sa === 'number') {
@@ -177,10 +176,29 @@ export default function PlanWorkDayScreen() {
                             if (!Number.isNaN(dObj.getTime())) return dObj;
                         }
                         return sa;
-                    } catch (e) {
+                    } catch {
                         return sa;
                     }
                 })(),
+                // keep the original HH:mm string when present so the UI can display it unchanged
+                startAtString: (() => {
+                    const sa = t?.startAtString ?? t?.startAt;
+                     if (sa === undefined || sa === null || sa === '') return undefined;
+                     try {
+                         if (typeof sa === 'string') {
+                             const m = /^\s*(\d{1,2}):(\d{2})\s*$/.exec(sa);
+                             if (m) return `${m[1].padStart(2, '0')}:${m[2]}`;
+                             // if it's ISO, format to local HH:mm (but preserve original string could be fine too)
+                             if (sa.includes('T')) {
+                                 const dObj = new Date(sa);
+                                 if (!Number.isNaN(dObj.getTime())) return `${String(dObj.getHours()).padStart(2, '0')}:${String(dObj.getMinutes()).padStart(2, '0')}`;
+                             }
+                         }
+                         return undefined;
+                     } catch {
+                         return undefined;
+                     }
+                 })(),
                 usedMaterials: (t.usedMaterials || []).map((um: any) => ({
                     ...um,
                     material: (() => {
@@ -291,9 +309,10 @@ export default function PlanWorkDayScreen() {
                 if (!Number.isNaN(v.getTime())) return v.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             }
             if (typeof v === 'string') {
+                // If ISO string, extract the time component directly (avoid timezone conversion)
                 if (v.includes('T')) {
-                    const d = new Date(v);
-                    if (!Number.isNaN(d.getTime())) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    const mIso = /T(\d{2}):(\d{2})/.exec(v);
+                    if (mIso) return `${mIso[1]}:${mIso[2]}`;
                 }
                 const m = /^\s*(\d{1,2}):(\d{2})\s*$/.exec(v);
                 if (m) return `${m[1].padStart(2, '0')}:${m[2]}`;
@@ -451,7 +470,12 @@ export default function PlanWorkDayScreen() {
                                             <Text style={{color: '#444'}}>{formatMinutes(task?.duration || 0)}</Text>
                                         </View>
                                         {/* scheduled start (startAt) */}
-                                        {task?.startAt ? (
+                                        {task?.startAtString ? (
+                                            <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 4}}>
+                                                <MaterialIcons name="schedule" size={16} color="#444" style={{marginRight: 6}} />
+                                                <Text style={{color: '#444'}}>{task.startAtString}</Text>
+                                            </View>
+                                        ) : task?.startAt ? (
                                             <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 4}}>
                                                 <MaterialIcons name="schedule" size={16} color="#444" style={{marginRight: 6}} />
                                                 <Text style={{color: '#444'}}>{formatStartAtDisplay(task.startAt)}</Text>
