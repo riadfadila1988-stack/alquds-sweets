@@ -58,7 +58,7 @@ export default function MaterialsScreen() {
             />
           )}
           contentContainerStyle={{ paddingBottom: 80 }}
-          ListEmptyComponent={<Text style={[styles.empty, isRTL ? styles.textRight : null]}>{t('noEmployeesData') || 'No materials yet'}</Text>}
+          ListEmptyComponent={<Text style={[styles.empty, isRTL ? styles.textRight : null]}>{t('noMaterialsData') || 'No materials yet'}</Text>}
         />
       )}
 

@@ -4,11 +4,13 @@ import { useMaterials } from '@/hooks/use-materials';
 import { useAuth } from '@/hooks/use-auth';
 import Header from './components/header';
 import { useTranslation } from './_i18n';
+import { useWorkingHours } from '@/hooks/use-working-hours';
 
 export default function UpdateMaterialQuantityScreen() {
   const { t } = useTranslation();
-  const { materials, isLoading, error, update, refetch } = useMaterials();
+  const { materials, isLoading, error, updateQuantity, refetch } = useMaterials();
   const { user, isLoading: authLoading } = useAuth();
+  const { currentSession } = useWorkingHours();
 
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [savingIds, setSavingIds] = useState<Record<string, boolean>>({});
@@ -60,6 +62,11 @@ export default function UpdateMaterialQuantityScreen() {
   };
 
   const handleSave = async (id: string) => {
+    // Prevent saving when the user is not clocked in
+    if (!currentSession) {
+      Alert.alert(t('mustClockIn') || 'Please clock in before saving changes');
+      return;
+    }
     const raw = edits[id];
     const n = raw === '' ? NaN : Number(raw);
     if (Number.isNaN(n)) {
@@ -73,7 +80,7 @@ export default function UpdateMaterialQuantityScreen() {
 
     try {
       setSavingIds((s) => ({ ...s, [id]: true }));
-      const ok = await update(id, { quantity: n });
+      const ok = await updateQuantity(id, { quantity: n });
       if (ok) {
         Alert.alert(t('saved') || 'Saved');
       } else {
@@ -119,11 +126,12 @@ export default function UpdateMaterialQuantityScreen() {
     <View style={styles.container}>
       <Header title={t('updateMaterialsQuantity') || 'Update Materials'} />
 
-      {/* Search bar with clear button (flips in RTL) */}
-      <View style={[styles.searchContainer, isRTL ? { flexDirection: 'row-reverse' } : undefined]}>
-        <View style={[styles.searchBar, isRTL ? { flexDirection: 'row-reverse' } : undefined]}>
+      {/* Search label and input on same row (RTL-aware) */}
+      <View style={[styles.searchContainerRow, isRTL ? { flexDirection: 'row-reverse' } : { flexDirection: 'row' }]}>
+        <Text style={[styles.searchLabelRow, isRTL ? { textAlign: 'right', marginLeft: 8 } : { textAlign: 'left', marginRight: 8 }]}>{t('searchMaterials') || 'Search materials'}</Text>
+        <View style={[styles.searchRowCenter, isRTL ? { flexDirection: 'row-reverse' } : undefined]}>
           <TextInput
-            style={[styles.searchInput, isRTL ? { textAlign: 'right' } : { textAlign: 'left' }]}
+            style={[styles.searchInputRow, { minWidth: 150, flex: undefined }, isRTL ? { textAlign: 'right' } : { textAlign: 'left' }]}
             placeholder={t('searchMaterials') || 'Search materials...'}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -164,11 +172,23 @@ export default function UpdateMaterialQuantityScreen() {
             const id = item._id ?? item.name;
             const value = edits[id] ?? '';
             const saving = !!savingIds[id];
+            const updatedLabel = item.updatedAt ? new Date(item.updatedAt).toLocaleString() : undefined;
+
+            const canSave = !!currentSession && !saving;
+
             return (
               <View style={styles.row}>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.name, isRTL ? { textAlign: 'right' } : undefined]}>{`${item.name}${item.heName ? ' | ' + item.heName : ''}`}</Text>
-                  {/* Reverse the controls order on RTL by using row-reverse inline style */}
+                  <Text style={[styles.name, isRTL ? { textAlign: 'right' } : undefined]}>
+                    {`${item.name}${item.heName ? ' | ' + item.heName : ''}`}
+                  </Text>
+
+                  {updatedLabel ? (
+                    <Text style={[styles.updated, isRTL ? { textAlign: 'right' } : undefined]}>
+                      {`${t('updated') || 'Updated'}: ${updatedLabel}`}
+                    </Text>
+                  ) : null}
+
                   <View style={[styles.controlsRow, isRTL ? { flexDirection: 'row-reverse' } : undefined]}>
                     <TouchableOpacity style={styles.smallBtn} onPress={() => dec(id)} accessibilityLabel="decrease">
                       <Text style={styles.smallBtnText}>-</Text>
@@ -186,8 +206,16 @@ export default function UpdateMaterialQuantityScreen() {
                       <Text style={styles.smallBtnText}>+</Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.saveBtn} onPress={() => handleSave(id)} disabled={saving}>
-                      {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>{t('save') || 'Save'}</Text>}
+                    <TouchableOpacity
+                      style={[styles.saveBtn, !canSave ? { opacity: 0.5 } : undefined]}
+                      onPress={() => handleSave(id)}
+                      disabled={!canSave}
+                    >
+                      {saving ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <Text style={styles.saveBtnText}>{t('save') || 'Save'}</Text>
+                      )}
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -202,23 +230,24 @@ export default function UpdateMaterialQuantityScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  searchContainer: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 6 },
-  searchBar: { flexDirection: 'row', alignItems: 'center' },
-  searchInput: { flex: 1, borderWidth: 1, borderColor: '#ddd', borderRadius: 8, paddingHorizontal: 10, height: 40, backgroundColor: '#fff' },
-  clearBtn: { padding: 6, justifyContent: 'center', alignItems: 'center' },
-  clearBtnText: { fontSize: 18, color: '#333' },
-  noResultsContainer: { padding: 24, alignItems: 'center', justifyContent: 'center' },
-  noResultsText: { color: '#666' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  row: { marginBottom: 12, backgroundColor: '#fff' },
-  name: { fontSize: 16, fontWeight: '600', marginBottom: 8 },
-  controlsRow: { flexDirection: 'row', alignItems: 'center' },
-  smallBtn: { width: 40, height: 40, borderRadius: 6, backgroundColor: '#eee', justifyContent: 'center', alignItems: 'center', marginRight: 8 },
-  smallBtnRtl: { marginRight: 0, marginLeft: 8 },
-  smallBtnText: { fontSize: 20, fontWeight: '700' },
-  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 6, paddingHorizontal: 10, height: 40, minWidth: 80, textAlign: 'center', marginRight: 8 },
-  inputRtl: { textAlign: 'center' },
-  saveBtn: { backgroundColor: '#007AFF', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 6 },
-  saveBtnText: { color: '#fff', fontWeight: '700' },
-  error: { color: 'red' },
+  searchContainerRow: { paddingHorizontal: 16, paddingVertical: 8, alignItems: 'center' },
+  searchLabelRow: { fontSize: 14, marginRight: 8 },
+  searchRowCenter: { flexDirection: 'row', alignItems: 'center' },
+  searchInputRow: { borderWidth: 1, borderColor: '#ddd', padding: 8, borderRadius: 6 },
+  clearBtn: { padding: 8 },
+  clearBtnText: { fontSize: 18 },
+  noResultsContainer: { padding: 20, alignItems: 'center' },
+  noResultsText: { color: '#666' },
+  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#eee' },
+  name: { fontSize: 16, fontWeight: '600' },
+  updated: { fontSize: 12, color: '#666' },
+  controlsRow: { marginTop: 8, alignItems: 'center' },
+  smallBtn: { padding: 8, borderRadius: 4, backgroundColor: '#f0f0f0', marginHorizontal: 6 },
+  smallBtnText: { fontSize: 16 },
+  input: { borderWidth: 1, borderColor: '#ddd', padding: 8, minWidth: 80, borderRadius: 6, textAlign: 'left' },
+  inputRtl: { textAlign: 'right' },
+  saveBtn: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 6, backgroundColor: '#1976D2', marginLeft: 8, alignItems: 'center', justifyContent: 'center' },
+  saveBtnText: { color: '#fff', fontWeight: '600' },
+  error: { color: '#a00' },
 });

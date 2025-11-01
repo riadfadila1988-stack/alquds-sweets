@@ -13,12 +13,6 @@ api.interceptors.request.use(async (config) => {
             config.headers = config.headers || {};
             (config.headers as any)['Authorization'] = `Bearer ${token}`;
         }
-        // Dev logging: show outgoing request and whether token is attached
-        try {
-          if (typeof __DEV__ !== 'undefined' && __DEV__) {
-            console.debug('[API] request', { url: config.url, method: config.method, hasAuth: !!token });
-          }
-        } catch (e) {}
     } catch {}
     return config;
 });
@@ -33,10 +27,10 @@ api.interceptors.response.use(
         try {
           await AsyncStorage.removeItem('@token');
           await AsyncStorage.removeItem('@user');
-        } catch (e) {}
+        } catch {}
         emitLogout();
       }
-    } catch (e) {}
+    } catch {}
     return Promise.reject(error);
   }
 );

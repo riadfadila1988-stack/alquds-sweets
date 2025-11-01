@@ -1,9 +1,10 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, FlatList, Pressable, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, FlatList, Pressable, Platform, Keyboard } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useMaterials } from '@/hooks/use-materials';
 import { IUsedMaterial } from '@/types/task-group';
 import { useTranslation } from '@/app/_i18n';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 interface TaskProps {
   task: any;
@@ -12,63 +13,212 @@ interface TaskProps {
   index?: number;
 }
 
-export default function Task({ task, onChange, onRemove }: TaskProps) {
+function Task({ task, onChange, onRemove }: TaskProps) {
   const { t } = useTranslation();
   const isRTL = true;
   const { materials } = useMaterials();
   const [descHeight, setDescHeight] = React.useState<number>(100);
+  // Local editable state to avoid focus issues while typing inside FlatList rows
+  const [localName, setLocalName] = React.useState<string>(task?.name ?? '');
+  const [localDuration, setLocalDuration] = React.useState<string>(task?.duration !== undefined && task?.duration !== null ? String(task.duration) : '');
+  const [localDescription, setLocalDescription] = React.useState<string>(task?.description ?? '');
+  // Local state for startAt (store as string like 'HH:mm' or ISO; will send as string or undefined)
+  const [localStartAt, setLocalStartAt] = React.useState<string>(
+    task?.startAt !== undefined && task?.startAt !== null ? String(task.startAt) : ''
+  );
+  const [showStartAtPicker, setShowStartAtPicker] = useState(false);
   // Refs used to force focus when parent touchables/gestures intercept taps
   const nameRef = useRef<any>(null);
   const durationRef = useRef<any>(null);
+  const startAtRef = useRef<any>(null);
   const descRef = useRef<any>(null);
-  const usedQtyRefs = useRef<Record<number, any>>({});
+  const [usedQtyRefs] = React.useState(() => ({} as Record<number, any>));
   const prodQtyRefs = useRef<Record<number, any>>({});
+  // Local copies of used/produced materials so we can update UI immediately
+  const [localUsedMaterials, setLocalUsedMaterials] = React.useState<any[]>(task?.usedMaterials ? [...task.usedMaterials] : []);
+  const [localProducedMaterials, setLocalProducedMaterials] = React.useState<any[]>(task?.producedMaterials ? [...task.producedMaterials] : []);
   const [materialsCollapsed, setMaterialsCollapsed] = useState(false);
   const [producedCollapsed, setProducedCollapsed] = useState(false);
   const [activePicker, setActivePicker] = useState<{ section: 'used' | 'produced'; index: number } | null>(null);
   const [modalSearch, setModalSearch] = useState('');
 
-  const handleFieldChange = (field: string, value: any) => {
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      console.debug(`[Task] field change: ${field} ->`, value);
+  // Sync local state when the task identity changes (new task row) to avoid overwriting
+  // user's in-progress edits when parent updates other fields.
+  React.useEffect(() => {
+    const key = (task && (task._key ?? task._id)) ?? null;
+    setLocalName(task?.name ?? '');
+    setLocalDuration(task?.duration !== undefined && task?.duration !== null ? String(task.duration) : '');
+    setLocalDescription(task?.description ?? '');
+    setLocalStartAt(task?.startAt !== undefined && task?.startAt !== null ? String(task.startAt) : '');
+    // initialize local materials copies when task identity changes
+    setLocalUsedMaterials(task?.usedMaterials ? [...task.usedMaterials] : []);
+    setLocalProducedMaterials(task?.producedMaterials ? [...task.producedMaterials] : []);
+    // Only run when identity changes
+  }, [ (task && (task._key ?? task._id)) ]);
+
+  // NOTE: we intentionally only initialize localStartAt when the task identity changes
+  // (see effect above) and avoid syncing on every prop update so user edits are not
+  // unexpectedly overwritten by parent re-renders.
+
+  // Helper: parse a stored time string to a Date for the picker. Accepts ISO or 'HH:mm'.
+  const parseToDate = (v?: string) => {
+    if (!v) return new Date();
+    // If ISO-like
+    if (v.includes('T')) {
+      const d = new Date(v);
+      if (!isNaN(d.getTime())) return d;
     }
-    onChange({ ...task, [field]: value });
+    // If HH:mm
+    const m = v.match(/^(\d{1,2}):(\d{2})$/);
+    if (m) {
+      const now = new Date();
+      now.setHours(Number(m[1]));
+      now.setMinutes(Number(m[2]));
+      now.setSeconds(0);
+      now.setMilliseconds(0);
+      return now;
+    }
+    return new Date();
+  };
+
+  const formatTimeForDisplay = (v?: string) => {
+    if (!v) return '';
+    if (v.includes('T')) {
+      const d = new Date(v);
+      if (!isNaN(d.getTime())) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    const m = v.match(/^(\d{1,2}):(\d{2})$/);
+    if (m) {
+      const hh = m[1].padStart(2, '0');
+      return `${hh}:${m[2]}`;
+    }
+    return v;
+  };
+
+  const handleFieldChange = (field: string, value: any) => {
+    // Update local state and defer parent update to onBlur for stable typing experience
+    if (field === 'name') setLocalName(String(value ?? ''));
+    else if (field === 'duration') setLocalDuration(String(value ?? ''));
+    else if (field === 'description') setLocalDescription(String(value ?? ''));
+    else if (field === 'startAt') setLocalStartAt(String(value ?? ''));
+    else {
+      // for other fields, update immediately
+      onChange({ ...task, [field]: value });
+    }
+  };
+  // We intentionally avoid pushing parent updates on every keystroke because that can cause
+  // the FlatList row to re-render and reset focus/selection. Instead, we update parent only
+  // when the input blurs (flushLocalToParent). This keeps typing smooth and reliable.
+
+  const flushLocalToParent = React.useCallback((_maybeField?: string) => {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      try { console.log('[Task] flushLocalToParent', { key: task?._key ?? task?._id, localStartAt, field: _maybeField }); } catch (e) {}
+    }
+    // Convert duration to number on flush
+    const durationNum = localDuration !== '' ? Number(localDuration) : 0;
+    const payload: any = {
+      ...task,
+      name: String(localName ?? ''),
+      duration: Number.isFinite(durationNum) ? durationNum : 0,
+      description: String(localDescription ?? ''),
+    };
+    // include startAt only when provided (string like 'HH:mm' or ISO)
+    if (localStartAt !== '') payload.startAt = localStartAt;
+    else payload.startAt = undefined;
+    // include materials from local state so parent sees latest immediate changes
+    payload.usedMaterials = (localUsedMaterials || []).map((um: any) => ({ ...um }));
+    payload.producedMaterials = (localProducedMaterials || []).map((pm: any) => ({ ...pm }));
+    // ensure payload contains a stable key for parent lookup
+    try { payload._key = task?._key ?? task?._id ?? payload._key; } catch (e) {}
+    onChange(payload);
+    // No-op: avoid touching prop-sync refs here to prevent clobbering user edits.
+  }, [localName, localDuration, localDescription, localStartAt, onChange, task, localUsedMaterials, localProducedMaterials]);
+
+  // Immediate updater used when typing into the startAt input so the parent reflects
+  // the change right away. This prevents the UI from appearing to revert after parent
+  // re-renders replace the component's props.
+  const updateStartAtImmediate = (val: string) => {
+    setLocalStartAt(val);
+    const durationNum = localDuration !== '' ? Number(localDuration) : 0;
+    const payload: any = {
+      ...task,
+      name: String(localName ?? ''),
+      duration: Number.isFinite(durationNum) ? durationNum : 0,
+      description: String(localDescription ?? ''),
+      startAt: val !== '' ? val : undefined,
+      // include local materials so immediate update keeps them in sync
+      usedMaterials: (localUsedMaterials || []).map((um: any) => ({ ...um })),
+      producedMaterials: (localProducedMaterials || []).map((pm: any) => ({ ...pm })),
+    };
+    // ensure payload contains a stable key for parent lookup
+    try { payload._key = task?._key ?? task?._id ?? payload._key; } catch (e) {}
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      try { console.log('[Task] updateStartAtImmediate', { key: task?._key ?? task?._id, val }); } catch (e) {}
+    }
+    onChange(payload);
+  };
+
+  // Robust handler for the native DateTimePicker change event
+  const onStartAtPickerChange = (event: any, date?: Date | undefined) => {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      try { console.log('[Task] onStartAtPickerChange', { event, date, key: task?._key ?? task?._id }); } catch (e) {}
+    }
+    // On Android the event includes a nativeEvent.action or type indicating 'dismissed' vs 'set'
+    if (Platform.OS === 'android') {
+      // Close the picker on Android regardless of outcome
+      setShowStartAtPicker(false);
+      const action = event?.type ?? event?.nativeEvent?.action;
+      if (action === 'dismissed' || action === 'dismiss') return;
+      // Some versions send undefined event.type and date === undefined when dismissed
+      if (!date) return;
+    }
+
+    // For iOS the picker stays open until the user closes it; onChange here may be called with a Date
+    if (!date) return;
+    const hh = String(date.getHours()).padStart(2, '0');
+    const mm = String(date.getMinutes()).padStart(2, '0');
+    const val = `${hh}:${mm}`;
+    setLocalStartAt(val);
+    // Use the immediate updater so we don't rely on React state being flushed
+    updateStartAtImmediate(val);
   };
 
   const toggleMaterialsCollapsed = () => setMaterialsCollapsed(v => !v);
   const toggleProducedCollapsed = () => setProducedCollapsed(v => !v);
 
   const addMaterialToTask = () => {
-    const used = [...(task.usedMaterials || [])];
-    if (materials && materials.length > 0) {
-      used.push({ material: materials[0], quantity: 1 } as IUsedMaterial);
-    } else {
-      used.push({ material: undefined, quantity: 1 } as any);
+    const used = [...(localUsedMaterials || [])];
+    if (materials && materials.length > 0) used.push({ material: materials[0], quantity: 1 } as IUsedMaterial);
+    else used.push({ material: undefined, quantity: 1 } as any);
+    setLocalUsedMaterials(used);
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      try { console.log('[Task] addMaterialToTask', { key: task?._key ?? task?._id, used }); } catch (e) {}
     }
-    onChange({ ...task, usedMaterials: used });
+    // flush immediately so parent has the new item
+    flushLocalToParent('usedMaterials');
     setMaterialsCollapsed(false);
   };
 
   const addProducedMaterialToTask = () => {
-    const produced = [...(task.producedMaterials || [])];
-    if (materials && materials.length > 0) {
-      produced.push({ material: materials[0], quantity: 1 } as IUsedMaterial);
-    } else {
-      produced.push({ material: undefined, quantity: 1 } as any);
-    }
-    onChange({ ...task, producedMaterials: produced });
+    const produced = [...(localProducedMaterials || [])];
+    if (materials && materials.length > 0) produced.push({ material: materials[0], quantity: 1 } as IUsedMaterial);
+    else produced.push({ material: undefined, quantity: 1 } as any);
+    setLocalProducedMaterials(produced);
+    flushLocalToParent('producedMaterials');
     setProducedCollapsed(false);
   };
 
   const removeMaterialFromTask = (section: 'used' | 'produced', index: number) => {
     if (section === 'used') {
-      const used = [...(task.usedMaterials || [])];
+      const used = [...(localUsedMaterials || [])];
       used.splice(index, 1);
-      onChange({ ...task, usedMaterials: used });
+      setLocalUsedMaterials(used);
+      flushLocalToParent('usedMaterials');
     } else {
-      const produced = [...(task.producedMaterials || [])];
+      const produced = [...(localProducedMaterials || [])];
       produced.splice(index, 1);
-      onChange({ ...task, producedMaterials: produced });
+      setLocalProducedMaterials(produced);
+      flushLocalToParent('producedMaterials');
     }
   };
 
@@ -86,13 +236,21 @@ export default function Task({ task, onChange, onRemove }: TaskProps) {
     if (!activePicker) return;
     const { section, index } = activePicker;
     if (section === 'used') {
-      const used = [...(task.usedMaterials || [])];
+      const used = [...(localUsedMaterials || [])];
       used[index] = { ...used[index], material };
-      onChange({ ...task, usedMaterials: used });
+      setLocalUsedMaterials(used);
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        try { console.log('[Task] handleMaterialSelect used', { key: task?._key ?? task?._id, index, material }); } catch (e) {}
+      }
+      flushLocalToParent('usedMaterials');
     } else {
-      const produced = [...(task.producedMaterials || [])];
+      const produced = [...(localProducedMaterials || [])];
       produced[index] = { ...produced[index], material };
-      onChange({ ...task, producedMaterials: produced });
+      setLocalProducedMaterials(produced);
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        try { console.log('[Task] handleMaterialSelect produced', { key: task?._key ?? task?._id, index, material }); } catch (e) {}
+      }
+      flushLocalToParent('producedMaterials');
     }
     closeMaterialPicker();
   };
@@ -100,17 +258,23 @@ export default function Task({ task, onChange, onRemove }: TaskProps) {
   const handleMaterialQuantityChange = (section: 'used' | 'produced', index: number, quantity: any) => {
     // store raw input (string) so the TextInput remains controlled and typing isn't interrupted;
     // numeric coercion can be done later when saving or computing totals.
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      console.debug(`[Task] quantity change: ${section}[${index}] ->`, quantity);
-    }
     if (section === 'used') {
-      const used = [...(task.usedMaterials || [])];
+      const used = [...(localUsedMaterials || [])];
       used[index] = { ...used[index], quantity };
-      onChange({ ...task, usedMaterials: used });
+      setLocalUsedMaterials(used);
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        try { console.log('[Task] handleMaterialQuantityChange used', { key: task?._key ?? task?._id, index, quantity }); } catch (e) {}
+      }
+      // flush only this field
+      flushLocalToParent('usedMaterials');
     } else {
-      const produced = [...(task.producedMaterials || [])];
+      const produced = [...(localProducedMaterials || [])];
       produced[index] = { ...produced[index], quantity };
-      onChange({ ...task, producedMaterials: produced });
+      setLocalProducedMaterials(produced);
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        try { console.log('[Task] handleMaterialQuantityChange produced', { key: task?._key ?? task?._id, index, quantity }); } catch (e) {}
+      }
+      flushLocalToParent('producedMaterials');
     }
   };
 
@@ -127,32 +291,84 @@ export default function Task({ task, onChange, onRemove }: TaskProps) {
           ref={nameRef}
           style={[styles.input, isRTL && styles.inputRtl]}
           placeholder={t('taskName') || 'Task Name'}
-          value={task.name ?? ''}
+          value={localName}
           onChangeText={(v) => handleFieldChange('name', v)}
-          onFocus={() => { if (typeof __DEV__ !== 'undefined' && __DEV__) console.debug('[Task] name input focused'); }}
+          onBlur={() => flushLocalToParent('name')}
+          onFocus={() => { /* focus */ }}
           onPressIn={() => nameRef.current?.focus && nameRef.current.focus()}
           editable
           selectTextOnFocus
         />
+
         <TextInput
           ref={durationRef}
           style={[styles.input, isRTL && styles.inputRtl]}
           placeholder={t('durationInMinutes') || 'Duration (minutes)'}
-          value={task.duration !== undefined && task.duration !== null ? String(task.duration) : ''}
+          value={localDuration}
           keyboardType="numeric"
           onChangeText={(v) => handleFieldChange('duration', v)}
-          onFocus={() => { if (typeof __DEV__ !== 'undefined' && __DEV__) console.debug('[Task] duration input focused'); }}
+          onBlur={() => flushLocalToParent('duration')}
+          onFocus={() => { /* focus */ }}
           onPressIn={() => durationRef.current?.focus && durationRef.current.focus()}
           editable
           selectTextOnFocus
         />
+        {/* Start At: show formatted time inside a TextInput and open native time picker on focus/press */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <TextInput
+             ref={startAtRef}
+             style={[styles.input, { flex: 1 }, isRTL && styles.inputRtl]}
+             placeholder={t('startAt') || 'Start At'}
+             // show localStartAt (edited value) or fall back to the task prop so newly-added
+             // tasks display their default startAt immediately
+             value={localStartAt ?? (task?.startAt !== undefined && task?.startAt !== null ? String(task.startAt) : '')}
+             onChangeText={(v) => { if (typeof __DEV__ !== 'undefined' && __DEV__) try { console.log('[Task] startAt onChangeText', v); } catch(e){}; updateStartAtImmediate(String(v ?? '')); }}
+             onBlur={() => flushLocalToParent('startAt')}
+             editable
+             selectTextOnFocus
+             keyboardType={'default'}
+             autoCorrect={false}
+             autoCapitalize={'none'}
+             returnKeyType={'done'}
+             onSubmitEditing={() => flushLocalToParent('startAt')}
+           />
+           {/* Clock button to open native time picker */}
+           <TouchableOpacity style={[styles.iconButtonSmall, { marginLeft: 8 }]} onPress={() => { Keyboard.dismiss(); setShowStartAtPicker(true); }}>
+             <MaterialIcons name="access-time" size={20} color="#007AFF" style={isRTL ? { transform: [{ scaleX: -1 }] } : undefined} />
+           </TouchableOpacity>
+           {localStartAt ? (
+             <TouchableOpacity
+               style={[styles.iconButtonRemove, isRTL && styles.iconButtonRemoveRtl, { marginLeft: 8 }]}
+               onPress={() => {
+                 if (typeof __DEV__ !== 'undefined' && __DEV__) {
+                   try { console.log('[Task] clearStartAt pressed', { key: task?._key ?? task?._id, prevLocal: localStartAt }); } catch (e) {}
+                 }
+                 // close native picker if open
+                 try { setShowStartAtPicker(false); } catch (e) {}
+                 updateStartAtImmediate('');
+               }}
+             >
+               <MaterialIcons name="close" size={18} color="#666" />
+             </TouchableOpacity>
+           ) : null}
+         </View>
+         {showStartAtPicker && (
+           <DateTimePicker
+             value={parseToDate(localStartAt)}
+             mode={'time'}
+             is24Hour={true}
+             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+             onChange={onStartAtPickerChange}
+           />
+         )}
         <TextInput
           ref={descRef}
           style={[styles.input, isRTL && styles.inputRtl, styles.textarea, isRTL && styles.textareaRtl, { height: descHeight, textAlignVertical: 'top' }]}
           placeholder={t('description') || 'Description'}
-          value={task.description ?? ''}
+          value={localDescription}
           onChangeText={(v) => handleFieldChange('description', v)}
-          onFocus={() => { if (typeof __DEV__ !== 'undefined' && __DEV__) console.debug('[Task] description input focused'); }}
+          onBlur={() => flushLocalToParent('description')}
+          onFocus={() => { /* focus */ }}
           onPressIn={() => descRef.current?.focus && descRef.current.focus()}
           editable
           selectTextOnFocus
@@ -182,7 +398,7 @@ export default function Task({ task, onChange, onRemove }: TaskProps) {
 
         {!materialsCollapsed && (
           <>
-            {(task.usedMaterials || []).map((used: any, mi: number) => (
+            {(localUsedMaterials || []).map((used: any, mi: number) => (
               <View key={mi} style={[styles.materialContainer, isRTL && styles.materialContainerRtl]}>
                 <TouchableOpacity style={[styles.materialSelector, isRTL && styles.materialSelectorRtl]} onPress={() => openMaterialPicker(mi, 'used')}>
                   <Text style={[styles.materialSelectorText, isRTL && styles.materialSelectorTextRtl]}>{
@@ -228,7 +444,7 @@ export default function Task({ task, onChange, onRemove }: TaskProps) {
 
         {!producedCollapsed && (
           <>
-            {(task.producedMaterials || []).map((prod: any, mi: number) => (
+            {(localProducedMaterials || []).map((prod: any, mi: number) => (
               <View key={`prod-${mi}`} style={[styles.materialContainer, isRTL && styles.materialContainerRtl]}>
                 <TouchableOpacity style={[styles.materialSelector, isRTL && styles.materialSelectorRtl]} onPress={() => openMaterialPicker(mi, 'produced')}>
                   <Text style={[styles.materialSelectorText, isRTL && styles.materialSelectorTextRtl]}>{
@@ -275,7 +491,7 @@ export default function Task({ task, onChange, onRemove }: TaskProps) {
               value={modalSearch ?? ''}
               onChangeText={setModalSearch}
               autoFocus
-              onFocus={() => { if (typeof __DEV__ !== 'undefined' && __DEV__) console.debug('[Task] modal search focused'); }}
+              onFocus={() => { /* focus */ }}
               editable
               selectTextOnFocus
             />
@@ -298,6 +514,9 @@ export default function Task({ task, onChange, onRemove }: TaskProps) {
     </View>
   );
 }
+
+// Memoize the Task component to avoid re-renders/remounts when parent re-renders without changes
+export default React.memo(Task);
 
 const styles = StyleSheet.create({
   taskCard: {

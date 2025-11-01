@@ -18,6 +18,11 @@ export const updateMaterial = async (id: string, data: Partial<IMaterial>) => {
   return response.data;
 };
 
+export const updateMaterialQuantity = async (id: string, data: { quantity?: number }) => {
+  const response = await api.patch(`${BASE}/${id}/quantity`, data);
+  return response.data;
+};
+
 export const deleteMaterial = async (id: string) => {
   const response = await api.delete(`${BASE}/${id}`);
   return response.data;

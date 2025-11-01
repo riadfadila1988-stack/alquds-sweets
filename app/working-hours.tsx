@@ -138,45 +138,50 @@ export default function WorkingHoursScreen() {
               {t('noWorkHistory')}
             </Text>
           ) : (
-            todaySessions.map((session) => (
-              <View key={session._id} style={[styles.historyItem, { backgroundColor: '#f5f5f5' }]}>
-                <View style={[styles.historyHeader, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-                  <Text style={[styles.historyDate, { color: textColor, textAlign: rtlTextAlign }]}>
-                    {new Date(session.clockIn).toLocaleDateString()}
-                  </Text>
-                  {session.duration && (
-                    <Text style={[styles.historyDuration, { color: '#4CAF50', textAlign: rtlTextAlign }]}>
-                      {formatDuration(session.duration)}
-                    </Text>
+            todaySessions.map((session) => {
+              const dateStr = new Date(session.clockIn).toLocaleDateString();
+              const inTime = new Date(session.clockIn).toLocaleTimeString();
+              const outTime = session.clockOut ? new Date(session.clockOut).toLocaleTimeString() : null;
+              const durationStr = typeof session.duration === 'number' && session.duration > 0 ? formatDuration(session.duration) : null;
+
+              const formatLoc = (loc: any) => {
+                if (!loc) return '';
+                if (loc.label) return String(loc.label);
+                if (typeof loc.latitude === 'number' && typeof loc.longitude === 'number') {
+                  return `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`;
+                }
+                return '';
+              };
+
+              const clockInLocText = session.clockInLocation ? (formatLoc(session.clockInLocation) || '') : '';
+              const clockOutLocText = session.clockOutLocation ? (formatLoc(session.clockOutLocation) || '') : '';
+
+              return (
+                <View key={String(session._id)} style={[styles.historyItem, { backgroundColor: '#f5f5f5' }]}>
+                  <View style={[styles.historyHeader, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                    <Text style={[styles.historyDate, { color: textColor, textAlign: rtlTextAlign }]}>{dateStr}</Text>
+                    {durationStr ? <Text style={[styles.historyDuration, { color: '#4CAF50', textAlign: rtlTextAlign }]}>{durationStr}</Text> : null}
+                  </View>
+
+                  <Text style={[styles.historyTime, { color: textColor, textAlign: rtlTextAlign }]}>{`${t('in')} ${inTime}`}</Text>
+
+                  {clockInLocText ? (
+                    <Text style={[styles.historyTime, { color: '#666', textAlign: rtlTextAlign }]}>{`${t('location') || 'Location'}: ${clockInLocText}`}</Text>
+                  ) : null}
+
+                  {outTime ? (
+                    <>
+                      <Text style={[styles.historyTime, { color: textColor, textAlign: rtlTextAlign }]}>{`${t('out')} ${outTime}`}</Text>
+                      {clockOutLocText ? (
+                        <Text style={[styles.historyTime, { color: '#666', textAlign: rtlTextAlign }]}>{`${t('location') || 'Location'}: ${clockOutLocText}`}</Text>
+                      ) : null}
+                    </>
+                  ) : (
+                    <Text style={[styles.historyTime, { color: '#F44336', textAlign: rtlTextAlign }]}>{t('stillWorking')}</Text>
                   )}
                 </View>
-                <Text style={[styles.historyTime, { color: textColor, textAlign: rtlTextAlign }]}>
-                  {t('in')} {new Date(session.clockIn).toLocaleTimeString()}
-                </Text>
-                {session.clockInLocation ? (
-                  <Text style={[styles.historyTime, { color: '#666', textAlign: rtlTextAlign }]}>
-                    {t('location') || 'Location'}: {session.clockInLocation.label ? session.clockInLocation.label : `${session.clockInLocation.latitude.toFixed(4)}, ${session.clockInLocation.longitude.toFixed(4)}`}
-                  </Text>
-                ) : null}
-
-                {session.clockOut ? (
-                  <>
-                    <Text style={[styles.historyTime, { color: textColor, textAlign: rtlTextAlign }]}>
-                      {t('out')} {new Date(session.clockOut).toLocaleTimeString()}
-                    </Text>
-                    {session.clockOutLocation ? (
-                      <Text style={[styles.historyTime, { color: '#666', textAlign: rtlTextAlign }]}>
-                        {t('location') || 'Location'}: {session.clockOutLocation.label ? session.clockOutLocation.label : `${session.clockOutLocation.latitude.toFixed(4)}, ${session.clockOutLocation.longitude.toFixed(4)}`}
-                      </Text>
-                    ) : null}
-                  </>
-                ) : (
-                  <Text style={[styles.historyTime, { color: '#F44336', textAlign: rtlTextAlign }]}>
-                    {t('stillWorking')}
-                  </Text>
-                )}
-              </View>
-            ))
+              );
+            })
           )}
         </ScrollView>
       </View>

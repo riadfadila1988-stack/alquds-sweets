@@ -7,13 +7,7 @@ import Timer from './components/timer';
 import { createNotification } from '@/services/notification';
 import Header from './components/header';
 import { useTranslation } from './_i18n';
-
-// DEV logging helper
-const dbg = (...args: any[]) => {
-  if (typeof __DEV__ !== 'undefined' && __DEV__) {
-    console.debug('[TodayTasks]', ...args);
-  }
-};
+import { getHistory as getAttendanceHistory } from '@/services/employee-attendance';
 
 export default function TodayTasksScreen() {
   const { t } = useTranslation();
@@ -26,9 +20,7 @@ export default function TodayTasksScreen() {
   const isoDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const { plan, isLoading: planLoading, error, save } = useWorkDayPlan(isoDate);
 
-  const loading = authLoading || planLoading;
-
-  // Local copy of assignments so UI updates instantly while saving
+  // loading will include attendanceLoading and is defined after attendance state is declared
   const [localAssignments, setLocalAssignments] = useState<any[]>(() => plan?.assignments ? [...plan.assignments] : []);
 
   // Timer state (milliseconds elapsed for active task)
@@ -79,7 +71,6 @@ export default function TodayTasksScreen() {
     if (!onTickHandlersRef.current[idx]) {
       onTickHandlersRef.current[idx] = (s: number) => {
         if (activeTaskIndexRef.current === idx) {
-          dbg('onTick handler (stable) setActiveSecondsRemaining', { idx, s });
           setActiveSecondsRemaining(s);
         }
       };
@@ -97,7 +88,6 @@ export default function TodayTasksScreen() {
       if (t && typeof t.duration === 'number' && t.startTime) {
         const elapsedSec = Math.floor((nowMs - new Date(t.startTime).getTime()) / 1000);
         const remaining = Math.round(t.duration * 60) - elapsedSec;
-        dbg('setActiveSecondsRemaining initial', { activeTaskIndex, remaining });
         setActiveSecondsRemaining(remaining);
       } else {
         setActiveSecondsRemaining(null);
@@ -111,6 +101,41 @@ export default function TodayTasksScreen() {
   const [overrunModalVisible, setOverrunModalVisible] = useState(false);
   const [overrunPending, setOverrunPending] = useState<{ taskIndex: number; endTime: Date } | null>(null);
   const [overrunReason, setOverrunReason] = useState('');
+
+  // Attendance state: null = unknown/loading, true = clocked in, false = not clocked in
+  const [isClockedIn, setIsClockedIn] = useState<boolean | null>(null);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+
+  // Load whether the current user has an open attendance session for today.
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      if (!user) return;
+      try {
+        setAttendanceLoading(true);
+        const data = await getAttendanceHistory();
+        const today = new Date();
+        const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+        const todays = (data.records || []).filter((s: any) => {
+          const dt = new Date(s.clockIn);
+          return dt >= startOfDay && dt < endOfDay;
+        });
+        const userIdStr = String(user?._id || user);
+        const open = todays.find((s: any) => String(s.employeeId) === userIdStr && !s.clockOut);
+        if (mounted) setIsClockedIn(!!open);
+      } catch {
+        if (mounted) setIsClockedIn(false);
+      } finally {
+        if (mounted) setAttendanceLoading(false);
+      }
+    };
+    load();
+    const id = setInterval(load, 60000);
+    return () => { mounted = false; clearInterval(id); };
+  }, [user]);
+
+  const loading = authLoading || planLoading || attendanceLoading;
 
   if (loading) {
     return (
@@ -223,6 +248,29 @@ export default function TodayTasksScreen() {
 
   const handleStart = async (taskIndex: number) => {
     if (!myAssignment) return;
+    // Prevent starting a task when the user is not clocked in.
+    try {
+      const data = await getAttendanceHistory();
+      const today = new Date();
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+      const todays = (data.records || []).filter((s: any) => {
+        const dt = new Date(s.clockIn);
+        return dt >= startOfDay && dt < endOfDay;
+      });
+      const userIdStr = String(user?._id || user);
+      const open = todays.find((s: any) => String(s.employeeId) === userIdStr && !s.clockOut);
+      if (!open) {
+        Alert.alert(
+          t('mustClockIn') || 'Clock in required',
+          t('mustClockInMessage') || 'Please clock in before starting a task.'
+        );
+        return;
+      }
+    } catch (e: any) {
+      Alert.alert(t('attendanceCheckFailed') || 'Attendance check failed', String(e?.message || e));
+      return;
+    }
     const now = new Date();
     let updated = JSON.parse(JSON.stringify(assignments));
 
@@ -320,7 +368,7 @@ export default function TodayTasksScreen() {
         overtimeTextAr = `${overtimeMin} دقيقة`;
       }
 
-      dbg('creating overrun notification (AR)', { empName, taskName, overtimeMin, reasonText });
+      // debug removed
       const messageAr = `${empName} — "${taskName}" استغرق ${overtimeTextAr} أكثر. السبب: ${reasonText}`;
       await createNotification(messageAr);
       // In development, notify the user that the notification was sent (helps debug missing server-side creation)
@@ -329,7 +377,7 @@ export default function TodayTasksScreen() {
           Alert.alert(t('notifications'), t('notificationSent'));
         }
       } catch {}
-      dbg('sent overrun notification (AR)', { empName, taskName, overtimeMin, reasonText });
+      // debug removed
     } catch (e: any) {
       // Surface failure to the user in dev so it's obvious why admins wouldn't see it
       try {
@@ -337,7 +385,7 @@ export default function TodayTasksScreen() {
           Alert.alert(t('notificationFailed'), String(e?.message || e));
         }
       } catch {}
-      dbg('failed to send overrun notification', e?.message || e);
+      // debug removed
     } finally {
       // clear the reason input in the UI
       setOverrunReason('');
@@ -416,9 +464,20 @@ export default function TodayTasksScreen() {
 
                 <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', marginTop: 8, justifyContent: 'flex-end' }}>
                   {showStart ? (
-                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: tint }]} onPress={() => handleStart(idx)}>
-                      <Text style={{ color: 'white' }}>{t('start')}</Text>
-                    </TouchableOpacity>
+                    // Disable the Start button if the attendance check indicates the user is not clocked in
+                    // or if the check is still pending (isClockedIn === null).
+                    (() => {
+                      const startDisabled = isClockedIn !== true; // only enabled when explicitly true
+                      return (
+                        <TouchableOpacity
+                          style={[styles.actionBtn, { backgroundColor: tint, opacity: startDisabled ? 0.5 : 1 }]}
+                          onPress={() => handleStart(idx)}
+                          disabled={startDisabled}
+                        >
+                          <Text style={{ color: 'white' }}>{t('start')}</Text>
+                        </TouchableOpacity>
+                      );
+                    })()
                   ) : showEnd ? (
                     <TouchableOpacity style={[styles.actionBtn, { backgroundColor: dangerBg }]} onPress={() => handleEnd(idx)}>
                       <Text style={{ color: 'white' }}>{t('end')}</Text>

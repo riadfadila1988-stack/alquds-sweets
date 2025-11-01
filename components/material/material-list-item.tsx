@@ -11,6 +11,8 @@ export default function MaterialListItem({ item, onPress, onLongPress }: { item:
   const costLabel = typeof item.cost === 'number' ? Number(item.cost).toFixed(2) : undefined;
   const minQtyLabel = typeof item.notificationThreshold === 'number' ? String(item.notificationThreshold) : undefined;
   const createdLabel = item.createdAt ? new Date(item.createdAt).toLocaleDateString() : undefined;
+  // show last update datetime (date + time), if available
+  const updatedLabel = item.updatedAt ? new Date(item.updatedAt).toLocaleString() : undefined;
 
   // detect RTL from react-native
   const isRTL = true;
@@ -34,7 +36,7 @@ export default function MaterialListItem({ item, onPress, onLongPress }: { item:
         <View style={infoRowStyle}>
           {minQtyLabel ? <Text style={[styles.infoText, isRTL ? styles.infoTextRTL : null]}>{`${t('minQuantity')}: ${minQtyLabel}`}</Text> : null}
           {costLabel ? <Text style={[styles.infoText, isRTL ? styles.infoTextRTL : null]}>{`${t('cost')}: ${costLabel}`}</Text> : null}
-          {createdLabel ? <Text style={[styles.infoText, isRTL ? styles.infoTextRTL : null]}>{createdLabel}</Text> : null}
+          {updatedLabel ? <Text style={[styles.infoText, isRTL ? styles.infoTextRTL : null]}>{`${t('updated') || 'Updated'}: ${updatedLabel}`}</Text> : null}
         </View>
       </View>
 

@@ -139,6 +139,65 @@ export default function PlanWorkDayScreen() {
         return [];
     });
 
+    // Prepare assignments for saving: normalize durations/quantities and convert
+    // any resolved material objects back to string ids. Reused by the auto-save in
+    // toggleUser to avoid duplication.
+    const prepareAssignmentsForSave = (assigns: any[]) => {
+        return (assigns || []).map((a: any) => ({
+            ...a,
+            tasks: (a.tasks || []).map((t: any) => ({
+                ...t,
+                duration: (() => {
+                    const d = t?.duration;
+                    const n = Number(d);
+                    return Number.isFinite(n) ? n : 0;
+                })(),
+                // Normalize scheduled start (startAt): accept 'HH:mm' or ISO and convert 'HH:mm' into a Date on the plan's date
+                startAt: (() => {
+                    const sa = t?.startAt;
+                    if (sa === undefined || sa === null || sa === '') return undefined;
+                    try {
+                        if (typeof sa === 'string') {
+                            if (sa.includes('T')) {
+                                // probably an ISO string already
+                                const dObj = new Date(sa);
+                                if (!Number.isNaN(dObj.getTime())) return dObj;
+                                return sa;
+                            }
+                            const m = /^\s*(\d{1,2}):(\d{2})\s*$/.exec(sa);
+                            if (m) {
+                                const hh = Number(m[1]);
+                                const mm = Number(m[2]);
+                                const base = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hh, mm, 0, 0);
+                                return base;
+                            }
+                        }
+                        if (typeof sa === 'number') {
+                            const dObj = new Date(sa);
+                            if (!Number.isNaN(dObj.getTime())) return dObj;
+                        }
+                        return sa;
+                    } catch (e) {
+                        return sa;
+                    }
+                })(),
+                usedMaterials: (t.usedMaterials || []).map((um: any) => ({
+                    ...um,
+                    material: (() => {
+                        const mid = materialIdFrom((um as any)?.material);
+                        if (mid !== undefined && mid !== null) return String(mid);
+                        return (um as any)?.material;
+                    })(),
+                    quantity: (() => {
+                        const q = (um as any)?.quantity;
+                        const nq = Number(q);
+                        return Number.isFinite(nq) ? nq : 0;
+                    })(),
+                })),
+            }))
+        }));
+    };
+
     // Enable LayoutAnimation on Android (experimental flag)
     useEffect(() => {
         if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -223,66 +282,50 @@ export default function PlanWorkDayScreen() {
         return `${hh}:${mm}`;
     };
 
-    const toggleUser = (user: any) => {
-        const exists = assignments.find(a => String(a.user._id || a.user) === String(user._id));
-        if (exists) {
-            setAssignments(assignments.filter((a: any) => String(a.user._id || a.user) !== String(user._id)));
-        } else {
-            setAssignments([...assignments, {user: user._id || user, tasks: []}]);
-        }
+    // Helper: format a startAt value (Date object, ISO string, or 'HH:mm') for display
+    const formatStartAtDisplay = (v: any) => {
+        if (!v && v !== 0) return '';
+        try {
+            // If it's a Date-like object
+            if (typeof v === 'object' && v instanceof Date) {
+                if (!Number.isNaN(v.getTime())) return v.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+            if (typeof v === 'string') {
+                if (v.includes('T')) {
+                    const d = new Date(v);
+                    if (!Number.isNaN(d.getTime())) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                }
+                const m = /^\s*(\d{1,2}):(\d{2})\s*$/.exec(v);
+                if (m) return `${m[1].padStart(2, '0')}:${m[2]}`;
+                return v;
+            }
+            if (typeof v === 'number') {
+                const d = new Date(v);
+                if (!Number.isNaN(d.getTime())) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+        } catch {}
+        return '';
     };
 
-    const handleSave = async () => {
-        // ensure date is synced from editing if open
-        if (showDatePicker) {
-            const parsed = parseISODate(editingDate);
-            if (parsed) setDate(parsed);
-            setShowDatePicker(false);
-        }
+    const toggleUser = (user: any) => {
+        setAssignments(prev => {
+            const exists = prev.find(a => String(a.user._id || a.user) === String(user._id));
+            const newAssignments = exists ? prev.filter((a: any) => String(a.user._id || a.user) !== String(user._id)) : [...prev, {user: user._id || user, tasks: []}];
 
-        // Convert any resolved material objects back to their ids before saving
-        const cleanedAssignments = (assignments || []).map((a: any) => ({
-            ...a,
-            tasks: (a.tasks || []).map((t: any) => ({
-                ...t,
-                // Ensure duration is saved as a number (allow editing as string locally)
-                duration: (() => {
-                    const d = t?.duration;
-                    const n = Number(d);
-                    return Number.isFinite(n) ? n : 0;
-                })(),
-                usedMaterials: (t.usedMaterials || []).map((um: any) => ({
-                    ...um,
-                    material: (() => {
-                        const mid = materialIdFrom((um as any)?.material);
-                        if (mid !== undefined && mid !== null) return String(mid);
-                        // fallback to raw value (could be object) if no id extracted
-                        return (um as any)?.material;
-                    })(),
-                    // Ensure quantity is numeric when saved
-                    quantity: (() => {
-                        const q = (um as any)?.quantity;
-                        const nq = Number(q);
-                        return Number.isFinite(nq) ? nq : 0;
-                    })(),
-                })),
-            }))
-        }));
+            // Fire-and-forget auto-save for the updated assignments. We prepare
+            // the assignments the same way handleSave does so saved data is
+            // consistent.
+            (async () => {
+                try {
+                    await save({ date: isoDate, assignments: prepareAssignmentsForSave(newAssignments) });
+                } catch (e: any) {
+                    console.error('[PlanWorkDay] auto-save after toggleUser failed', e);
+                    try { Alert.alert(t('error') || 'Error', String(e?.message || e)); } catch {}
+                }
+            })();
 
-        // Debug: print the payload we are about to save so you can inspect
-        // whether usedMaterials contain ids (expected) or objects.
-        // Remove or guard this in production if it's noisy.
-        console.debug('[PlanWorkDay] saving cleanedAssignments:', JSON.parse(JSON.stringify(cleanedAssignments)));
-
-        try {
-            await save({date: isoDate, assignments: cleanedAssignments});
-            // notify success
-            try { Alert.alert(t('success') || 'Success', t('planSaved')); } catch {}
-        } catch (e: any) {
-            console.error('[PlanWorkDay] save failed', e);
-            try { Alert.alert(t('error') || 'Error', String(e?.message || e)); } catch {}
-        }
-         // optimistic: nothing else for now
+            return newAssignments;
+        });
     };
 
     // Filter users to include only employees
@@ -336,23 +379,28 @@ export default function PlanWorkDayScreen() {
                 <View style={styles.modalOverlay}>
                     <View style={[styles.modalInner, {alignSelf: 'stretch'}]}>
                         {/* Custom date picker: calendar, month picker, year picker */}
-                        <DatePickerContents />
+                        <DatePickerContents show={showDatePicker} editing={editingDate} dateProp={date} />
                     </View>
-                </View>
-             </Modal>
+                 </View>
+              </Modal>
 
             <Text style={[styles.sectionTitle, {color: textColor, textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr'}]}>{t('employees') || 'Employees'}</Text>
             {/* Employees shown as toggle-pill buttons so admin can quickly select/deselect employees */}
             <View style={[styles.togglesContainer, {flexDirection: isRTL ? 'row-reverse' : 'row'}]}>
                 {users.map((u: any) => {
                     const selected = assignments.find(a => String(a.user._id || a.user) === String(u._id));
+                    // If the employee has any task that was started or completed, we consider them locked
+                    const assignmentForUser = assignments.find(a => String(a.user._id || a.user) === String(u._id));
+                    const isLocked = !!assignmentForUser && Array.isArray(assignmentForUser.tasks) && (assignmentForUser.tasks || []).some((t: any) => !!t?.startTime || !!t?.endTime);
                     return (
                         <TouchableOpacity
                             key={u._id}
-                            onPress={() => toggleUser(u)}
+                            onPress={() => { if (!isLocked) toggleUser(u); }}
+                            disabled={isLocked}
                             style={[
                                 styles.userToggle,
                                 selected ? styles.userToggleSelected : styles.userToggleUnselected,
+                                isLocked ? styles.userToggleDisabled : undefined,
                             ]}
                         >
                             {/* Show name and total formatted time */}
@@ -402,6 +450,13 @@ export default function PlanWorkDayScreen() {
                                             <MaterialIcons name="access-time" size={16} color="#444" style={{marginRight: 6}} />
                                             <Text style={{color: '#444'}}>{formatMinutes(task?.duration || 0)}</Text>
                                         </View>
+                                        {/* scheduled start (startAt) */}
+                                        {task?.startAt ? (
+                                            <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 4}}>
+                                                <MaterialIcons name="schedule" size={16} color="#444" style={{marginRight: 6}} />
+                                                <Text style={{color: '#444'}}>{formatStartAtDisplay(task.startAt)}</Text>
+                                            </View>
+                                        ) : null}
                                         {task?.description ? <Text style={{color: '#666', marginBottom: 6, textAlign: 'right'}}>{task.description}</Text> : null}
                                         {(task?.usedMaterials || []).length > 0 && (
                                             <View style={{marginTop: 4}}>
@@ -426,20 +481,19 @@ export default function PlanWorkDayScreen() {
     };
 
     // --- Date picker component (moved inside PlanWorkDayScreen so it can access state) ---
-    function DatePickerContents() {
+    function DatePickerContents({ show, editing, dateProp }: { show: boolean; editing: string; dateProp: Date }) {
         const {t} = useTranslation();
         const [view, setView] = useState<'calendar'|'months'|'years'>('calendar');
-        const [pickerDate, setPickerDate] = useState<Date>(parseISODate(editingDate) ?? date ?? new Date());
+        const [pickerDate, setPickerDate] = useState<Date>(parseISODate(editing) ?? dateProp ?? new Date());
 
-        // Sync picker when modal opens. Disable exhaustive-deps rule because we intentionally only want to react when showDatePicker toggles.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // Sync picker when modal opens. Re-run when show, editing or dateProp change.
         useEffect(() => {
-            if (showDatePicker) {
-                const p = parseISODate(editingDate) ?? date ?? new Date();
+            if (show) {
+                const p = parseISODate(editing) ?? dateProp ?? new Date();
                 setPickerDate(p);
                 setView('calendar');
             }
-        }, [showDatePicker]);
+        }, [show, editing, dateProp]);
 
         const monthNames = [
             'January','February','March','April','May','June','July','August','September','October','November','December'
@@ -556,7 +610,7 @@ export default function PlanWorkDayScreen() {
 
                 <View style={{flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12}}>
                     <TouchableOpacity style={[styles.smallBtn, {marginRight: 8}]} onPress={() => {
-                        const edt = parseISODate(editingDate);
+                        const edt = parseISODate(editing);
                         const d = edt ?? new Date(pickerDate.getFullYear(), pickerDate.getMonth(), 1);
                         setDate(d);
                         setEditingDate(formatDateLocal(d));
@@ -569,8 +623,8 @@ export default function PlanWorkDayScreen() {
                     </TouchableOpacity>
                 </View>
             </View>
-        );
-    }
+         );
+     }
 
     return (
         <KeyboardAvoidingView
@@ -599,17 +653,9 @@ export default function PlanWorkDayScreen() {
                  keyboardShouldPersistTaps={'handled'}
                  keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
                  nestedScrollEnabled={true}
-                 ListFooterComponent={() => (
-                     <>
-                        <View style={{height: 8}}/>
-                        <TouchableOpacity style={[styles.saveBtn, {backgroundColor: '#2196F3'}]} onPress={handleSave}>
-                            <Text style={{color: 'white', fontWeight: '600'}}>{t('savePlan') || 'Save Plan'}</Text>
-                        </TouchableOpacity>
-                     </>
-                 )}
-                />
-            </SafeAreaView>
-        </KeyboardAvoidingView>
+                 />
+             </SafeAreaView>
+         </KeyboardAvoidingView>
     );
 }
 
@@ -666,6 +712,9 @@ const styles = StyleSheet.create({
     },
     userToggleUnselected: {
         backgroundColor: '#ddd',
+    },
+    userToggleDisabled: {
+        backgroundColor: '#bbb',
     },
     userToggleText: {
         fontSize: 14,

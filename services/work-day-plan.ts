@@ -18,4 +18,3 @@ export const createOrUpdateWorkDayPlan = async (payload: { date: string; assignm
 export const deleteWorkDayPlan = async (id: string) => {
   await api.delete(`/work-day-plans/${id}`);
 };
-

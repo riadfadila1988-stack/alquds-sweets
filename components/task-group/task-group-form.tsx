@@ -34,13 +34,34 @@ export default function TaskGroupForm({ initialData, onSubmit, onClose, isSaving
   }, [initialData]);
 
   const handleTaskChange = (index: number, newTask: Partial<ITask>) => {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      try { console.log('[TaskGroupForm] handleTaskChange', { index, newTask }); } catch { }
+    }
+    // If index is not provided (some calls may send a full task object), try to find
+    // the correct task by _key or _id. Otherwise update by index.
     const newTasks = [...tasks];
+    if (index === undefined || index === null) {
+      // attempt to find by _key first, then _id
+      const key = (newTask as any)?._key ?? (newTask as any)?._id;
+      if (key) {
+        const found = newTasks.findIndex(t => (t as any)?._key === key || (t as any)?._id === key);
+        if (found >= 0) {
+          newTasks[found] = { ...newTasks[found], ...newTask } as any;
+          setTasks(newTasks);
+          return;
+        }
+      }
+      // fallback: try to match by some other field (e.g., name) - if not found, append
+      setTasks(prev => prev.map(t => (t._id === (newTask as any)?._id ? { ...t, ...newTask } : t)));
+      return;
+    }
+
     newTasks[index] = { ...newTasks[index], ...newTask } as any;
     setTasks(newTasks);
   };
 
   const addTask = () => {
-    const newTask = { _key: makeKey(), name: '', duration: 0, description: '', usedMaterials: [], producedMaterials: [] } as any;
+    const newTask = { _key: makeKey(), name: '', duration: 0, description: '', startAt: '08:30', usedMaterials: [], producedMaterials: [] } as any;
     setTasks(prev => [...prev, newTask]);
   };
 
@@ -57,6 +78,7 @@ export default function TaskGroupForm({ initialData, onSubmit, onClose, isSaving
         name: task.name ?? '',
         duration: task.duration ?? 0,
         description: task.description ?? '',
+        startAt: task.startAt ?? undefined,
         usedMaterials: (task.usedMaterials || []).map((um: any) => ({
           material: (um as any)?.material?._id ?? (um as any)?.material,
           quantity: (um as any)?.quantity ?? 0,

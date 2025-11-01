@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Modal, FlatList, Keyboard, ActivityIndicator } from 'react-native';
 import { useTranslation } from '@/app/_i18n';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -74,11 +74,22 @@ export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose
     });
   };
 
-  const handleTaskChange = (index: number, newTask: any) => {
-    const newTasks = [...tasks];
-    newTasks[index] = { ...newTasks[index], ...newTask };
-    setTasks(newTasks);
-  };
+  const handleTaskChange = useCallback((index: number, newTask: any) => {
+    setTasks(prev => {
+      const copy = [...prev];
+      // If newTask has a stable key, find the correct index by key to avoid index staleness after reorder
+      let idx = index;
+      try {
+        const key = newTask?._key ?? newTask?._id;
+        if (key) {
+          const found = copy.findIndex((t: any) => (t?._key ?? t?._id) === key);
+          if (found >= 0) idx = found;
+        }
+      } catch {}
+      copy[idx] = { ...copy[idx], ...newTask };
+      return copy;
+    });
+  }, [setTasks]);
 
   const addTask = () => {
     const newTask = { _key: makeKey(), name: '', duration: 0, description: '', usedMaterials: [], producedMaterials: [] };
@@ -109,13 +120,43 @@ export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose
 
   const listRef = useRef<any>(null);
 
+  // Derive visible tasks for display: hide tasks that have been started (have startTime)
+  const visibleTasks = useMemo(() => {
+    return (tasks || []).filter((t: any) => !t?.startTime);
+  }, [tasks]);
+
+  // Compute which tasks should be locked (cannot be edited or removed or dragged)
+  // Criteria: task has been started (startTime) or ended (endTime) OR the task's position changed compared to initial order
+  const orderChangedKeys = useMemo(() => {
+    const initialKeys = (initialTasks || []).map((t: any) => t._key ?? t._id);
+    const currentKeys = (tasks || []).map((t: any) => t._key ?? t._id);
+    const changed = new Set<string>();
+    currentKeys.forEach((key, index) => {
+      if (key !== initialKeys[index]) {
+        changed.add(key);
+      }
+    });
+    return Array.from(changed);
+  }, [initialTasks, tasks]);
+
+  // Locking logic: determine if a task is locked based on its key
+  const isTaskLocked = useCallback((key?: string) => {
+    if (!key) return false;
+    // Check if the task is in the list of changed order keys (meaning its position has changed)
+    if (orderChangedKeys.includes(key)) return true;
+    // Find the task by key to check its startTime and endTime
+    const task = tasks.find((t: any) => (t._key ?? t._id) === key);
+    // A task is locked if it has a startTime or endTime (meaning it has been started or completed)
+    return !!task?.startTime || !!task?.endTime;
+  }, [orderChangedKeys, tasks]);
+
   // Small inner component for a task row to manage local press timer for starting drag
   function TaskRow({ task, taskIndex, drag, isActive }: { task: any; taskIndex: number; drag: () => void; isActive: boolean }) {
     const pressTimer = useRef<any>(null);
     const handlePressIn = () => {
       // start timer to begin drag after 600ms
       pressTimer.current = setTimeout(() => {
-        try { drag(); } catch (e) { console.debug('[Tasks] drag start error', e); }
+        try { drag(); } catch (e) { /* ignore */ }
         pressTimer.current = null;
       }, 600);
     };
@@ -257,10 +298,11 @@ export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose
 
         <DraggableFlatList
            ref={listRef}
-           data={tasks}
-           onDragBegin={(index: number) => { console.debug('[Tasks] onDragBegin', index); Keyboard.dismiss(); }}
-           onDragEnd={(params: any) => { console.debug('[Tasks] onDragEnd'); setTasks(params.data); Keyboard.dismiss(); }}
-           onRelease={(index: number) => { console.debug('[Tasks] onRelease', index); Keyboard.dismiss(); }}
+           data={visibleTasks}
+           extraData={tasks}
+           onDragBegin={(_index: number) => { Keyboard.dismiss(); }}
+           onDragEnd={(params: any) => { handleDragEnd(params); }}
+           onRelease={(_index: number) => { Keyboard.dismiss(); }}
            onScroll={() => { /* optional debug placeholder */ }}
           keyExtractor={(item: any) => item._key}
           ListFooterComponent={renderListFooter}
@@ -270,8 +312,9 @@ export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose
           activationDistance={20}
           dragItemOverflow
           renderItem={({ item: task, index: taskIndex, drag, isActive }: RenderItemParams<any>) => (
-            <TaskRow task={task} taskIndex={taskIndex} drag={drag} isActive={isActive} />
-          )}
+            // Provide a stable key so React preserves the Task component instance across re-renders
+            <TaskRow key={task._key ?? task._id ?? `task-${taskIndex}`} task={task} taskIndex={taskIndex} drag={drag} isActive={isActive} />
+           )}
          />
 
         {renderGroupsModal()}

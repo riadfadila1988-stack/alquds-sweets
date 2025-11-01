@@ -61,12 +61,7 @@ const Timer: React.FC<TimerProps> = ({
   }, [onTick]);
 
   // Debug helper (DEV only)
-  const dbg = (...args: any[]) => {
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      // keep a compact prefix so logs are easy to filter
-      console.debug('[Timer]', ...args);
-    }
-  };
+  const dbg = () => {};
 
   const isRunning = typeof isRunningProp === 'boolean' ? isRunningProp : true;
 

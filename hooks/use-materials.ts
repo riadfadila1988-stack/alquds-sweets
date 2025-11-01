@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getMaterials as apiGetMaterials, createMaterial as apiCreateMaterial, updateMaterial as apiUpdateMaterial, deleteMaterial as apiDeleteMaterial } from '@/services/material';
+import { getMaterials as apiGetMaterials, createMaterial as apiCreateMaterial, updateMaterial as apiUpdateMaterial, updateMaterialQuantity as apiUpdateMaterialQuantity, deleteMaterial as apiDeleteMaterial } from '@/services/material';
 import { IMaterial } from '@/types/material';
 
 export function useMaterials() {
@@ -15,6 +15,7 @@ export function useMaterials() {
       // Expecting the server to return an array
       setMaterials(result || []);
     } catch (e) {
+      console.warn('fetchMaterials error', e);
       setError('Failed to load materials');
     } finally {
       setIsLoading(false);
@@ -33,6 +34,7 @@ export function useMaterials() {
       await fetchMaterials();
       return true;
     } catch (e) {
+      console.warn('createMaterial error', e);
       setError('Failed to create material');
       return false;
     } finally {
@@ -48,6 +50,23 @@ export function useMaterials() {
       await fetchMaterials();
       return true;
     } catch (e) {
+      console.warn('updateMaterial error', e);
+      setError('Failed to update material');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fetchMaterials]);
+
+  const updateQuantity = useCallback(async (id: string, data: { quantity?: number }) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      await apiUpdateMaterialQuantity(id, data);
+      await fetchMaterials();
+      return true;
+    } catch (e) {
+      console.warn('updateMaterialQuantity error', e);
       setError('Failed to update material');
       return false;
     } finally {
@@ -63,6 +82,7 @@ export function useMaterials() {
       await fetchMaterials();
       return true;
     } catch (e) {
+      console.warn('deleteMaterial error', e);
       setError('Failed to delete material');
       return false;
     } finally {
@@ -70,5 +90,5 @@ export function useMaterials() {
     }
   }, [fetchMaterials]);
 
-  return { materials, isLoading, error, refetch: fetchMaterials, create, update, remove };
+  return { materials, isLoading, error, refetch: fetchMaterials, create, update, updateQuantity, remove };
 }
