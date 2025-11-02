@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput } from 'react-native';
 import MaterialListItem from '@/components/material/material-list-item';
 import MaterialForm from '@/components/material/material-form';
 import { useMaterials } from '@/hooks/use-materials';
@@ -13,6 +13,7 @@ export default function MaterialsScreen() {
   const { user } = useAuth();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedMaterial, setSelectedMaterial] = useState<any | null>(null);
+  const [search, setSearch] = useState('');
 
   // RTL forced on
   const isRTL = true;
@@ -42,13 +43,32 @@ export default function MaterialsScreen() {
     <View style={styles.container}>
       <Header title={t('materialsManagement') || 'Materials'} />
 
+      {/* Search input with label */}
+      <View style={{ marginBottom: 16 }}>
+        <Text style={styles.label}>{t('searchMaterials') || 'Search materials'}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TextInput
+            style={styles.searchInput}
+            value={search}
+            onChangeText={setSearch}
+            placeholder={t('searchMaterials') || 'Type to search...'}
+            placeholderTextColor="#999"
+            textAlign={isRTL ? 'right' : 'left'}
+          />
+        </View>
+      </View>
+
       {isLoading ? (
         <ActivityIndicator size="large" />
       ) : error ? (
         <Text style={[styles.errorText, isRTL ? styles.textRight : null]}>{error}</Text>
       ) : (
         <FlatList
-          data={materials}
+          data={materials.filter(m => {
+            const s = search.trim().toLowerCase();
+            if (!s) return true;
+            return (m.name || '').toLowerCase().includes(s) || (m.heName || '').toLowerCase().includes(s);
+          })}
           keyExtractor={(item) => item._id ?? item.name}
           renderItem={({ item }) => (
             <MaterialListItem
@@ -88,4 +108,23 @@ const styles = StyleSheet.create({
   errorText: { color: 'red', textAlign: 'center', marginTop: 20 },
   // helper text align for RTL
   textRight: { textAlign: 'right' },
+  label: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 6,
+    textAlign: 'right',
+    alignSelf: 'flex-end',
+  },
+  searchInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: '#111827',
+    backgroundColor: '#f9fafb',
+    marginBottom: 2,
+  },
 });
