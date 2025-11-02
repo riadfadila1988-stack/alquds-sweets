@@ -309,6 +309,7 @@ function Task({ task, onChange, onRemove }: TaskProps) {
       ) : null}
 
       <View style={styles.taskContainerInner}>
+        <Text style={[styles.label, isRTL && styles.labelRtl]}>{t('taskName') || 'Task Name'}</Text>
         <TextInput
           ref={nameRef}
           style={[styles.input, isRTL && styles.inputRtl]}
@@ -322,6 +323,7 @@ function Task({ task, onChange, onRemove }: TaskProps) {
           selectTextOnFocus
         />
 
+        <Text style={[styles.label, isRTL && styles.labelRtl]}>{t('durationInMinutes') || 'Duration (minutes)'}</Text>
         <TextInput
           ref={durationRef}
           style={[styles.input, isRTL && styles.inputRtl]}
@@ -336,6 +338,7 @@ function Task({ task, onChange, onRemove }: TaskProps) {
           selectTextOnFocus
         />
         {/* Start At: show formatted time inside a TextInput and open native time picker on focus/press */}
+        <Text style={[styles.label, isRTL && styles.labelRtl]}>{t('startAt') || 'Start At'}</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <TextInput
              ref={startAtRef}
@@ -364,19 +367,19 @@ function Task({ task, onChange, onRemove }: TaskProps) {
              <MaterialIcons name="access-time" size={20} color="#007AFF" style={isRTL ? { transform: [{ scaleX: -1 }] } : undefined} />
            </TouchableOpacity>
            {localStartAt ? (
-             <TouchableOpacity
-               style={[styles.iconButtonRemove, isRTL && styles.iconButtonRemoveRtl, { marginLeft: 8 }]}
-               onPress={() => {
-                 if (typeof __DEV__ !== 'undefined' && __DEV__) {
-                   try { console.log('[Task] clearStartAt pressed', { key: task?._key ?? task?._id, prevLocal: localStartAt }); } catch {}
-                 }
-                 // close native picker if open
-                 try { setShowStartAtPicker(false); } catch {}
-                 updateStartAtImmediate('');
-               }}
-             >
-               <MaterialIcons name="close" size={18} color="#666" />
-             </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.iconButtonRemove, isRTL && styles.iconButtonRemoveRtl, { marginLeft: 8 }]}
+              onPress={() => {
+                if (typeof __DEV__ !== 'undefined' && __DEV__) {
+                  try { console.log('[Task] clearStartAt pressed', { key: task?._key ?? task?._id, prevLocal: localStartAt }); } catch {}
+                }
+                // close native picker if open
+                try { setShowStartAtPicker(false); } catch {}
+                updateStartAtImmediate('');
+              }}
+            >
+              <MaterialIcons name="close" size={18} color="#666" />
+            </TouchableOpacity>
            ) : null}
          </View>
          {showStartAtPicker && (
@@ -388,6 +391,7 @@ function Task({ task, onChange, onRemove }: TaskProps) {
              onChange={onStartAtPickerChange}
            />
          )}
+        <Text style={[styles.label, isRTL && styles.labelRtl]}>{t('description') || 'Description'}</Text>
         <TextInput
           ref={descRef}
           style={[styles.input, isRTL && styles.inputRtl, styles.textarea, isRTL && styles.textareaRtl, { height: descHeight, textAlignVertical: 'top' }]}
@@ -593,3 +597,5 @@ const styles = StyleSheet.create({
   modalItemText: { fontSize: 14 },
   taskContainerInner: { paddingTop: 8 },
 });
+
+
