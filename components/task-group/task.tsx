@@ -17,7 +17,9 @@ function Task({ task, onChange, onRemove }: TaskProps) {
   const { t } = useTranslation();
   const isRTL = true;
   const { materials } = useMaterials();
-  const [descHeight, setDescHeight] = React.useState<number>(100);
+  // stable identity used for effect dependency checks
+  const taskKey = (task && (task._key ?? task._id)) ?? null;
+   const [descHeight, setDescHeight] = React.useState<number>(100);
   // Local editable state to avoid focus issues while typing inside FlatList rows
   const [localName, setLocalName] = React.useState<string>(task?.name ?? '');
   const [localDuration, setLocalDuration] = React.useState<string>(task?.duration !== undefined && task?.duration !== null ? String(task.duration) : '');
@@ -62,7 +64,8 @@ function Task({ task, onChange, onRemove }: TaskProps) {
    const durationRef = useRef<any>(null);
    const startAtRef = useRef<any>(null);
    const descRef = useRef<any>(null);
-   const [usedQtyRefs] = React.useState(() => ({} as Record<number, any>));
+   // refs for quantity inputs (useRef so we can access `.current`)
+   const usedQtyRefs = useRef<Record<number, any>>({});
    const prodQtyRefs = useRef<Record<number, any>>({});
    // Local copies of used/produced materials so we can update UI immediately
    const [localUsedMaterials, setLocalUsedMaterials] = React.useState<any[]>(task?.usedMaterials ? [...task.usedMaterials] : []);
@@ -75,7 +78,6 @@ function Task({ task, onChange, onRemove }: TaskProps) {
    // Sync local state when the task identity changes (new task row) to avoid overwriting
    // user's in-progress edits when parent updates other fields.
    React.useEffect(() => {
-      const key = (task && (task._key ?? task._id)) ?? null;
       setLocalName(task?.name ?? '');
       setLocalDuration(task?.duration !== undefined && task?.duration !== null ? String(task.duration) : '');
       setLocalDescription(task?.description ?? '');
@@ -84,7 +86,7 @@ function Task({ task, onChange, onRemove }: TaskProps) {
       setLocalUsedMaterials(task?.usedMaterials ? [...task.usedMaterials] : []);
       setLocalProducedMaterials(task?.producedMaterials ? [...task.producedMaterials] : []);
       // Only run when identity changes
-    }, [ (task && (task._key ?? task._id)) ]);
+    }, [taskKey, task]);
 
     // NOTE: we intentionally only initialize localStartAt when the task identity changes
     // (see effect above) and avoid syncing on every prop update so user edits are not
@@ -111,20 +113,6 @@ function Task({ task, onChange, onRemove }: TaskProps) {
       return new Date();
     };
 
-   const formatTimeForDisplay = (v?: string) => {
-     if (!v) return '';
-     if (v.includes('T')) {
-       const d = new Date(v);
-       if (!isNaN(d.getTime())) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-     }
-     const m = v.match(/^(\d{1,2}):(\d{2})$/);
-     if (m) {
-       const hh = m[1].padStart(2, '0');
-       return `${hh}:${m[2]}`;
-     }
-     return v;
-   };
-
    const handleFieldChange = (field: string, value: any) => {
     // Update local state and defer parent update to onBlur for stable typing experience
     if (field === 'name') setLocalName(String(value ?? ''));
@@ -140,7 +128,7 @@ function Task({ task, onChange, onRemove }: TaskProps) {
   // the FlatList row to re-render and reset focus/selection. Instead, we update parent only
   // when the input blurs (flushLocalToParent). This keeps typing smooth and reliable.
 
-  const flushLocalToParent = React.useCallback((_maybeField?: string) => {
+  const flushLocalToParent = React.useCallback((_maybeField?: string, data?: { used?: any[], produced?: any[] }) => {
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
         try { console.log('[Task] flushLocalToParent', { key: task?._key ?? task?._id, localStartAt, field: _maybeField }); } catch {}
       }
@@ -159,8 +147,8 @@ function Task({ task, onChange, onRemove }: TaskProps) {
       if (localStartAt !== '') payload.startAtString = localStartAt;
       else payload.startAtString = undefined;
       // include materials from local state so parent sees latest immediate changes
-      payload.usedMaterials = (localUsedMaterials || []).map((um: any) => ({ ...um }));
-      payload.producedMaterials = (localProducedMaterials || []).map((pm: any) => ({ ...pm }));
+      payload.usedMaterials = (data?.used ?? localUsedMaterials ?? []).map((um: any) => ({ ...um }));
+      payload.producedMaterials = (data?.produced ?? localProducedMaterials ?? []).map((pm: any) => ({ ...pm }));
       // ensure payload contains a stable key for parent lookup
       try { payload._key = task?._key ?? task?._id ?? payload._key; } catch {}
       onChange(payload);
@@ -229,7 +217,7 @@ function Task({ task, onChange, onRemove }: TaskProps) {
         try { console.log('[Task] addMaterialToTask', { key: task?._key ?? task?._id, used }); } catch {}
       }
       // flush immediately so parent has the new item
-      flushLocalToParent('usedMaterials');
+      flushLocalToParent('usedMaterials', { used });
       setMaterialsCollapsed(false);
     };
 
@@ -238,7 +226,7 @@ function Task({ task, onChange, onRemove }: TaskProps) {
     if (materials && materials.length > 0) produced.push({ material: materials[0], quantity: 1 } as IUsedMaterial);
     else produced.push({ material: undefined, quantity: 1 } as any);
     setLocalProducedMaterials(produced);
-    flushLocalToParent('producedMaterials');
+    flushLocalToParent('producedMaterials', { produced });
     setProducedCollapsed(false);
   };
 
@@ -247,12 +235,12 @@ function Task({ task, onChange, onRemove }: TaskProps) {
       const used = [...(localUsedMaterials || [])];
       used.splice(index, 1);
       setLocalUsedMaterials(used);
-      flushLocalToParent('usedMaterials');
+      flushLocalToParent('usedMaterials', { used });
     } else {
       const produced = [...(localProducedMaterials || [])];
       produced.splice(index, 1);
       setLocalProducedMaterials(produced);
-      flushLocalToParent('producedMaterials');
+      flushLocalToParent('producedMaterials', { produced });
     }
   };
 
@@ -276,7 +264,7 @@ function Task({ task, onChange, onRemove }: TaskProps) {
         if (typeof __DEV__ !== 'undefined' && __DEV__) {
           try { console.log('[Task] handleMaterialSelect used', { key: task?._key ?? task?._id, index, material }); } catch {}
         }
-        flushLocalToParent('usedMaterials');
+        flushLocalToParent('usedMaterials', { used });
       } else {
         const produced = [...(localProducedMaterials || [])];
         produced[index] = { ...produced[index], material };
@@ -284,7 +272,7 @@ function Task({ task, onChange, onRemove }: TaskProps) {
         if (typeof __DEV__ !== 'undefined' && __DEV__) {
           try { console.log('[Task] handleMaterialSelect produced', { key: task?._key ?? task?._id, index, material }); } catch {}
         }
-        flushLocalToParent('producedMaterials');
+        flushLocalToParent('producedMaterials', { produced });
       }
       closeMaterialPicker();
     };
@@ -300,7 +288,7 @@ function Task({ task, onChange, onRemove }: TaskProps) {
         try { console.log('[Task] handleMaterialQuantityChange used', { key: task?._key ?? task?._id, index, quantity }); } catch {}
       }
       // flush only this field
-      flushLocalToParent('usedMaterials');
+      flushLocalToParent('usedMaterials', { used });
     } else {
       const produced = [...(localProducedMaterials || [])];
       produced[index] = { ...produced[index], quantity };
@@ -308,7 +296,7 @@ function Task({ task, onChange, onRemove }: TaskProps) {
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
         try { console.log('[Task] handleMaterialQuantityChange produced', { key: task?._key ?? task?._id, index, quantity }); } catch {}
       }
-      flushLocalToParent('producedMaterials');
+      flushLocalToParent('producedMaterials', { produced });
     }
   };
 
@@ -356,7 +344,12 @@ function Task({ task, onChange, onRemove }: TaskProps) {
              // show localStartAt (edited value) or fall back to the task prop so newly-added
              // tasks display their default startAt immediately
              value={localStartAt ?? (task?.startAt !== undefined && task?.startAt !== null ? String(task.startAt) : '')}
-             onChangeText={(v) => { if (typeof __DEV__ !== 'undefined' && __DEV__) try { console.log('[Task] startAt onChangeText', v); } catch{}; updateStartAtImmediate(String(v ?? '')); }}
+             onChangeText={(v) => {
+               if (typeof __DEV__ !== 'undefined' && __DEV__) {
+                 try { console.log('[Task] startAt onChangeText', v); } catch {}
+               }
+               updateStartAtImmediate(String(v ?? ''));
+             }}
              onBlur={() => flushLocalToParent('startAt')}
              editable
              selectTextOnFocus

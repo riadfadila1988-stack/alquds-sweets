@@ -7,13 +7,29 @@ export const getNotifications = async () => {
   return response.data;
 };
 
+export const getMyNotifications = async (onlyUnread = false) => {
+  const q = onlyUnread ? '?unread=1' : '';
+  const response = await api.get(`${BASE}/me${q}`);
+  return response.data;
+};
+
 export const markNotificationRead = async (id: string) => {
   const response = await api.put(`${BASE}/${id}/read`);
   return response.data;
 };
 
+export const markNotificationReadForCurrentUser = async (id: string) => {
+  const response = await api.put(`${BASE}/me/${id}/read`);
+  return response.data;
+};
+
 export const markAllNotificationsRead = async () => {
   const response = await api.put(`${BASE}/mark-all-read`);
+  return response.data;
+};
+
+export const markAllNotificationsReadForCurrentUser = async () => {
+  const response = await api.put(`${BASE}/me/mark-all-read`);
   return response.data;
 };
 

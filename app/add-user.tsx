@@ -311,7 +311,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#374151',
     marginBottom: 8,
-    textAlign: isRTL ? 'right' : 'left',
+    textAlign: 'right', // Always align label text to the right
+    alignSelf: 'flex-end', // Move label to the right side
   },
   input: {
     backgroundColor: '#f9fafb',
@@ -329,7 +330,8 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     fontSize: 14,
     marginTop: 4,
-    textAlign: isRTL ? 'right' : 'left',
+    textAlign: 'right', // Always align error text to the right
+    alignSelf: 'flex-end', // Move error text to the right side
   },
   roleContainer: {
     flexDirection: isRTL ? 'row-reverse' : 'row',

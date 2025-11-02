@@ -8,6 +8,7 @@ import { createNotification } from '@/services/notification';
 import Header from './components/header';
 import { useTranslation } from './_i18n';
 import { getHistory as getAttendanceHistory } from '@/services/employee-attendance';
+import { MaterialIcons } from '@expo/vector-icons';
 
 export default function TodayTasksScreen() {
   const { t } = useTranslation();
@@ -154,24 +155,58 @@ export default function TodayTasksScreen() {
   }
 
   // Helpers to blend hex colors for fade effect
-  const hexToRgb = (hex: string) => {
-    const h = hex.replace('#', '');
-    const bigint = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
-    return { r: (bigint >> 16) & 255, g: (bigint >> 8) & 255, b: bigint & 255 };
-  };
-  const rgbToHex = (r: number, g: number, b: number) => '#' + [r, g, b].map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
-  const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-  const blendHex = (hexA: string, hexB: string, t: number) => {
+  const blendHex = (fromHex: string, toHex: string, ratio: number) => {
     try {
-      const A = hexToRgb(hexA);
-      const B = hexToRgb(hexB);
-      const r = lerp(A.r, B.r, t);
-      const g = lerp(A.g, B.g, t);
-      const b = lerp(A.b, B.b, t);
-      return rgbToHex(r, g, b);
+      const normalize = (h: string) => h.replace('#', '').trim();
+      let a = normalize(fromHex);
+      let b = normalize(toHex);
+      if (a.length === 3) a = a.split('').map(c => c + c).join('');
+      if (b.length === 3) b = b.split('').map(c => c + c).join('');
+      const ar = parseInt(a.slice(0,2), 16);
+      const ag = parseInt(a.slice(2,4), 16);
+      const ab = parseInt(a.slice(4,6), 16);
+      const br = parseInt(b.slice(0,2), 16);
+      const bg = parseInt(b.slice(2,4), 16);
+      const bb = parseInt(b.slice(4,6), 16);
+      const rr = Math.round(ar + (br - ar) * ratio).toString(16).padStart(2, '0');
+      const rg = Math.round(ag + (bg - ag) * ratio).toString(16).padStart(2, '0');
+      const rb = Math.round(ab + (bb - ab) * ratio).toString(16).padStart(2, '0');
+      return `#${rr}${rg}${rb}`;
     } catch {
-      return hexA;
+      return fromHex;
     }
+  };
+
+  // Helper: format startAt values (Date, ISO, or HH:mm) to 'HH:mm'
+  const formatStartAt = (v: any) => {
+    if (!v && v !== 0) return null;
+    try {
+      if (v instanceof Date) {
+        const hh = String(v.getHours()).padStart(2, '0');
+        const mm = String(v.getMinutes()).padStart(2, '0');
+        return `${hh}:${mm}`;
+      }
+      if (typeof v === 'number' && Number.isFinite(v)) {
+        const d = new Date(v);
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        return `${hh}:${mm}`;
+      }
+      if (typeof v === 'string') {
+        if (v.includes('T')) {
+          const d = new Date(v);
+          if (!isNaN(d.getTime())) {
+            const hh = String(d.getHours()).padStart(2, '0');
+            const mm = String(d.getMinutes()).padStart(2, '0');
+            return `${hh}:${mm}`;
+          }
+        }
+        const m = /^\s*(\d{1,2}):(\d{2})\s*$/.exec(v);
+        if (m) return `${m[1].padStart(2, '0')}:${m[2]}`;
+        return v;
+      }
+    } catch {}
+    return null;
   };
 
   const getTaskBackground = (t: any, idx?: number) => {
@@ -441,7 +476,12 @@ export default function TodayTasksScreen() {
                     ) : null}
                   </View>
                 </View>
-
+                  { (task.startAtString ?? task.startAt) ? (
+                      <View style={[{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', marginHorizontal: 6 }]}>
+                          <MaterialIcons name="access-time" size={16} color={textColor} style={{ marginHorizontal: isRTL ? 0 : 4 }} />
+                          <Text style={[styles.meta, { textAlign: isRTL ? 'right' : 'left' }]}>{formatStartAt(task.startAtString ?? task.startAt)}</Text>
+                      </View>
+                  ) : null}
                 {/* Show the Timer for the running task; otherwise show elapsed time */}
                 {isRunning ? (
                   (() => {
@@ -545,6 +585,7 @@ const styles = StyleSheet.create({
   error: { color: '#a00' },
   actionBtn: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 6 },
   badge: { fontSize: 16, padding: 4, borderRadius: 12, color: 'white' },
+  startAtText: { fontSize: 13, color: '#444', marginLeft: 4 },
 
   // Modal styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 20 },

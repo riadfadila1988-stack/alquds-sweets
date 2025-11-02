@@ -56,6 +56,9 @@ export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose
       description: t.description ?? '',
       usedMaterials: t.usedMaterials ?? [],
       producedMaterials: t.producedMaterials ?? [],
+      // Preserve start time if the template task has one
+      startAt: t.startAt ?? t.startAtString ?? undefined,
+      startAtString: t.startAtString ?? undefined,
     }));
     setTasks(prev => {
       const newArr = [...prev, ...tasksOnly];
@@ -116,6 +119,10 @@ export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose
 
   const handleSubmit = () => {
     onSubmit(tasks);
+  };
+
+  const handleDragEnd = ({ data }: { data: any[] }) => {
+    setTasks(data);
   };
 
   const listRef = useRef<any>(null);
@@ -264,20 +271,19 @@ export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose
           <View style={[styles.buttonContainer, isRTL && styles.buttonContainerRtl]}>
             {/* show a spinner beside the button only while saving; position respects RTL */}
             <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center' }}>
-              {isSaving && (
-                <ActivityIndicator
-                  size="small"
-                  color={isRTL ? '#007AFF' : '#007AFF'}
-                  style={isRTL ? { marginLeft: 8 } : { marginRight: 8 }}
-                />
-              )}
-
               <TouchableOpacity
                 style={[styles.primaryButton, isSaving && styles.buttonDisabled]}
                 onPress={handleSubmit}
                 disabled={isSaving}
                 accessibilityLabel={isSaving ? (t('saving') || 'Saving...') : (t('submit') || 'Submit')}
               >
+                  {isSaving && (
+                    <ActivityIndicator
+                      size="small"
+                      color={isRTL ? '#007AFF' : '#007AFF'}
+                      style={isRTL ? { marginLeft: 8 } : { marginRight: 8 }}
+                    />
+                  )}
                 <MaterialIcons name="save" size={18} color="#fff" />
                 <View style={{ width: 8 }} />
                 <Text style={styles.primaryButtonText}>{isSaving ? (t('saving') || 'Saving...') : (t('submit') || 'Submit')}</Text>
@@ -344,7 +350,7 @@ const styles = StyleSheet.create({
   topButtonsContainerRtl: { flexDirection: 'row-reverse' },
   footer: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingTop: 12, paddingBottom: 32, },
   footerRtl: { flexDirection: 'row-reverse' },
-  buttonContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  buttonContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flex:1 },
   buttonContainerRtl: { flexDirection: 'row-reverse' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
   modalInner: { width: '90%', backgroundColor: '#fff', borderRadius: 12, padding: 16, elevation: 4 },

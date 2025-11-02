@@ -61,7 +61,7 @@ export default function TaskGroupForm({ initialData, onSubmit, onClose, isSaving
   };
 
   const addTask = () => {
-    const newTask = { _key: makeKey(), name: '', duration: 0, description: '', startAt: '08:30', usedMaterials: [], producedMaterials: [] } as any;
+    const newTask = { _key: makeKey(), name: '', duration: 0, description: '', startAt: '', usedMaterials: [], producedMaterials: [] } as any;
     setTasks(prev => [...prev, newTask]);
   };
 
@@ -94,9 +94,6 @@ export default function TaskGroupForm({ initialData, onSubmit, onClose, isSaving
 
   const renderListHeader = () => (
     <View>
-      <Text style={[styles.label, isRTL && styles.labelRtl]}>{t('groupName') || 'Group Name'}</Text>
-      <TextInput style={[styles.input, isRTL && styles.inputRtl]} value={name} onChangeText={setName} />
-
       <View style={[styles.headerRow, isRTL && styles.headerRowRtl]}>
         <Text style={[styles.label, isRTL && styles.labelRtl]}>{t('tasks') || 'Tasks'}</Text>
         {tasks.length === 0 && (
@@ -175,6 +172,20 @@ export default function TaskGroupForm({ initialData, onSubmit, onClose, isSaving
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
       >
+        {/* Move group name input outside the FlatList so it won't unmount on list re-renders */}
+        <View>
+          <Text style={[styles.label, isRTL && styles.labelRtl]}>{t('groupName') || 'Group Name'}</Text>
+          <TextInput
+            style={[styles.input, isRTL && styles.inputRtl]}
+            value={name}
+            onChangeText={setName}
+            placeholder={t('groupName') || 'Group Name'}
+            // keep keyboard focus even when list updates
+            keyboardType="default"
+            returnKeyType="done"
+          />
+        </View>
+
         <DraggableFlatList
           ref={listRef}
           data={tasks}

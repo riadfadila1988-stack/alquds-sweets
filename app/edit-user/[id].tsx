@@ -154,7 +154,7 @@ export default function EditUserScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
   form: { backgroundColor: '#fff', padding: 16, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
-  label: { fontSize: 14, color: '#374151', fontWeight: '600' },
+  label: { fontSize: 14, color: '#374151', fontWeight: '600', textAlign: 'right', alignSelf: 'flex-end' },
   input: { borderWidth: 1, borderColor: '#e5e7eb', padding: 12, borderRadius: 8, marginTop: 8 },
   roleBtn: { flex: 1, padding: 12, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, alignItems: 'center', marginRight: 8 },
   roleBtnActive: { backgroundColor: '#eff6ff', borderColor: '#3b82f6' },

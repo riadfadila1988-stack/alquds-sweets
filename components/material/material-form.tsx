@@ -133,19 +133,19 @@ export default function MaterialForm({
                 <TextInput placeholder={t('cost')} value={cost} onChangeText={setCost} style={[styles.input, isRTL ? styles.rtlText : styles.ltrText]} keyboardType="numeric" />
 
                 {/* Unit selector */}
-                <Text style={[styles.label, isRTL ? styles.rtlText : styles.ltrText]}>{t('selectUnit')}</Text>
-                <TouchableOpacity style={styles.input} onPress={() => setShowUnitPicker((s) => !s)}>
-                  <Text style={[styles.inputText, isRTL ? styles.rtlText : styles.ltrText]}>{unit ? (t(('unit_' + unit) as any) ?? unit) : t('selectUnit')}</Text>
-                </TouchableOpacity>
-                {showUnitPicker && (
-                  <View style={styles.unitList}>
-                    {UNITS.map((u) => (
-                      <TouchableOpacity key={u} style={[styles.unitItem, isRTL ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }]} onPress={() => { setUnit(u); setShowUnitPicker(false); }}>
-                        <Text style={[styles.unitText, isRTL ? styles.rtlText : styles.ltrText]}>{t(('unit_' + u) as any) ?? u}</Text>
-                       </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
+                {/*<Text style={[styles.label, isRTL ? styles.rtlText : styles.ltrText]}>{t('selectUnit')}</Text>*/}
+                {/*<TouchableOpacity style={styles.input} onPress={() => setShowUnitPicker((s) => !s)}>*/}
+                {/*  <Text style={[styles.inputText, isRTL ? styles.rtlText : styles.ltrText]}>{unit ? (t(('unit_' + unit) as any) ?? unit) : t('selectUnit')}</Text>*/}
+                {/*</TouchableOpacity>*/}
+                {/*{showUnitPicker && (*/}
+                {/*  <View style={styles.unitList}>*/}
+                {/*    {UNITS.map((u) => (*/}
+                {/*      <TouchableOpacity key={u} style={[styles.unitItem, isRTL ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }]} onPress={() => { setUnit(u); setShowUnitPicker(false); }}>*/}
+                {/*        <Text style={[styles.unitText, isRTL ? styles.rtlText : styles.ltrText]}>{t(('unit_' + u) as any) ?? u}</Text>*/}
+                {/*       </TouchableOpacity>*/}
+                {/*    ))}*/}
+                {/*  </View>*/}
+                {/*)}*/}
                 {error ? <Text style={[styles.error, isRTL ? styles.rtlText : styles.ltrText]}>{error}</Text> : null}
                 {isSubmitting ? (
                   <ActivityIndicator size="small" />
