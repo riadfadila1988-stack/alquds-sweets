@@ -22,7 +22,7 @@ function formatDurationMinutes(minutes: number | undefined) {
 // Helper: normalize common task fields to support different backend shapes
 function getTaskStart(task: any): Date | null {
   if (!task) return null;
-  const possible = [task.startTime, task.start, task.startedAt, task.start_time, task.started_at, task.startAt];
+  const possible = [task.startTime];
   for (const p of possible) {
     if (p == null) continue;
     // If it's a number (ms or s), try to normalize
@@ -40,7 +40,7 @@ function getTaskStart(task: any): Date | null {
 
 function getTaskEnd(task: any): Date | null {
   if (!task) return null;
-  const possible = [task.endTime, task.end, task.endedAt, task.end_time, task.ended_at, task.endAt];
+  const possible = [task.endTime];
   for (const p of possible) {
     if (p == null) continue;
     if (typeof p === 'number') {
@@ -93,7 +93,7 @@ export default function WorkStatusScreen() {
   // Server expects a date that maps to the stored WorkDayPlan date (date-only)
   // Pass YYYY-MM-DD (no time) to avoid exact timestamp mismatch when querying by Date equality.
   const todayDateOnly = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const { plan, isLoading, error } = useWorkDayPlan(todayDateOnly);
+  const { plan, isLoading, error, refetch } = useWorkDayPlan(todayDateOnly);
   // user not needed in this screen
   useAuth();
 
@@ -177,12 +177,20 @@ export default function WorkStatusScreen() {
         }
       }
       setCurrentSessionsMap(map);
+
+      // Also trigger a refetch of the day's plan so task list reflects updates on the server
+      try {
+        if (typeof refetch === 'function') await refetch();
+      } catch (e) {
+        // non-fatal
+        console.warn('Failed to refetch work day plan', e);
+      }
     } catch (e) {
       console.warn('Failed to load attendance', e);
     } finally {
       setAttendanceLoading(false);
     }
-  }, []);
+  }, [refetch]);
 
   useEffect(() => {
     // Load attendance when the component mounts and when plan changes
@@ -349,10 +357,14 @@ export default function WorkStatusScreen() {
                          return <Text style={[styles.emptyText, { color: textColor }, rtlText]}>{t('noTasksToday') || 'No tasks found for today.'}</Text>;
                        }
                        return visible.map((task: any, i: number) => {
-                         const isRunning = !!getTaskStart(task) && !getTaskEnd(task);
-                         const isFinished = !!getTaskStart(task) && !!getTaskEnd(task);
-                         const bg = getTaskBackground(task);
-                         const status = getTaskStatus(task);
+                        const isRunning = !!getTaskStart(task) && !getTaskEnd(task);
+                        const bg = getTaskBackground(task);
+                        const status = getTaskStatus(task);
+
+                         // Compute actual duration from task start/end timestamps (end - start)
+                         const taskStartDt = getTaskStart(task);
+                         const taskEndDt = getTaskEnd(task);
+                         const actualDurationMinutes = taskStartDt && taskEndDt ? Math.floor((taskEndDt.getTime() - taskStartDt.getTime()) / 60000) : undefined;
 
                          return (
                            <View key={task._id ?? i} style={[styles.card, { backgroundColor: bg }]}>
@@ -378,7 +390,8 @@ export default function WorkStatusScreen() {
                              ) : (
                               <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center' }}>
                                 <IconSymbol name="clock.fill" size={14} color={textColor} style={{ marginEnd: 8 }} />
-                                <Text style={[styles.meta, { color: textColor }, rtlText]}>{isFinished ? formatDurationMinutes(getTaskDurationMinutes(task) ?? undefined) : '00:00:00'}</Text>
+                                {/* Show actual elapsed time computed from endTime - startTime when available */}
+                                <Text style={[styles.meta, { color: textColor }, rtlText]}>{typeof actualDurationMinutes === 'number' ? formatDurationMinutes(actualDurationMinutes) : '00:00'}</Text>
                               </View>
                              )}
 

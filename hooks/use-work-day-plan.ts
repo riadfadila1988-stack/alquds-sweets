@@ -13,7 +13,7 @@ export function useWorkDayPlan(date?: string) {
 
   const effectiveDate = date ?? formatDateLocal(new Date());
 
-  const { data: plan, isLoading, error } = useQuery({
+  const { data: plan, isLoading, error, refetch } = useQuery({
     queryKey: ['workDayPlan', effectiveDate],
     queryFn: () => getWorkDayPlanByDate(effectiveDate),
     enabled: !!effectiveDate,
@@ -32,5 +32,6 @@ export function useWorkDayPlan(date?: string) {
     isLoading,
     error: error?.message,
     save: saveMutation.mutateAsync,
+    refetch, // expose refetch so callers can trigger a manual refresh (used by work-status interval)
   };
 }
