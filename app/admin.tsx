@@ -59,6 +59,11 @@ export default function AdminScreen() {
                         <Text style={styles.menuText}>{t('materialsManagement')}</Text>
                     </TouchableOpacity>
                 </Link>
+                <Link href="/material-groups" asChild>
+                    <TouchableOpacity style={styles.menuItem}>
+                        <Text style={styles.menuText}>{t('materialsManagement')}</Text>
+                    </TouchableOpacity>
+                </Link>
                 <Link href="/task-groups" asChild>
                     <TouchableOpacity style={styles.menuItem}>
                         <Text style={styles.menuText}>{t('taskGroups') || 'Task Groups'}</Text>
