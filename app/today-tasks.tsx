@@ -12,7 +12,8 @@ import {
     KeyboardAvoidingView,
     Platform,
     TouchableWithoutFeedback,
-    Keyboard
+    Keyboard,
+    InteractionManager
 } from 'react-native';
 import {useAuth} from '@/hooks/use-auth';
 import {useWorkDayPlan} from '@/hooks/use-work-day-plan';
@@ -121,6 +122,10 @@ export default function TodayTasksScreen() {
     const [isClockedIn, setIsClockedIn] = useState<boolean | null>(null);
     const [attendanceLoading, setAttendanceLoading] = useState(false);
 
+    // Scroll handling: track ScrollView ref and per-card y offsets so we can scroll to a task
+    const scrollRef = React.useRef<ScrollView | null>(null);
+    const cardOffsetsRef = React.useRef<Record<number, number>>({});
+
     // Load whether the current user has an open attendance session for today.
     useEffect(() => {
         let mounted = true;
@@ -154,6 +159,46 @@ export default function TodayTasksScreen() {
     }, [user]);
 
     const loading = authLoading || planLoading || attendanceLoading;
+
+    // Scroll to running or last-finished task after layout/interaction
+    useEffect(() => {
+        if (loading) return;
+        if (!tasks || tasks.length === 0) return;
+
+        // determine target index: running task first, otherwise last finished task
+        const targetIndex = activeTaskIndex >= 0
+            ? activeTaskIndex
+            : (() => {
+                let last = -1;
+                for (let i = 0; i < tasks.length; i++) {
+                    const tt = tasks[i];
+                    if (tt && tt.startTime && tt.endTime) last = i;
+                }
+                return last;
+            })();
+
+        const indexToScroll = targetIndex >= 0 ? targetIndex : Math.max(0, tasks.length - 1);
+
+        const doScroll = () => {
+            const y = cardOffsetsRef.current[indexToScroll];
+            try {
+                if (scrollRef.current && y !== undefined) {
+                    // subtract a little padding so the card isn't flush to the top
+                    scrollRef.current.scrollTo({y: Math.max(0, y - 12), animated: true});
+                } else if (scrollRef.current) {
+                    // fallback: scroll to end (useful if offsets not yet measured)
+                    scrollRef.current.scrollToEnd({animated: true});
+                }
+            } catch {
+                // ignore scroll errors on older RN versions
+            }
+        };
+
+        // Wait until interactions/layout settle; small timeout to allow onLayout handlers to run
+        InteractionManager.runAfterInteractions(() => {
+            setTimeout(doScroll, 60);
+        });
+    }, [activeTaskIndex, tasks, loading]);
 
     if (loading) {
         return (
@@ -475,7 +520,7 @@ export default function TodayTasksScreen() {
     return (
         <View style={styles.screen}>
             <Header title={t('todayTasks')}/>
-            <ScrollView contentContainerStyle={styles.container}>
+            <ScrollView ref={scrollRef} contentContainerStyle={styles.container}>
                 {tasks.length === 0 ? (
                     <Text style={[styles.empty, {textAlign: isRTL ? 'right' : 'left'}]}>{t('noTasksToday')}</Text>
                 ) : (
@@ -497,7 +542,11 @@ export default function TodayTasksScreen() {
                         const showStart = idx === nextStartableIndex;
 
                         return (
-                            <View key={task._id ?? idx} style={[styles.card, {backgroundColor: bg}]}>
+                            <View
+                                key={task._id ?? idx}
+                                style={[styles.card, {backgroundColor: bg}]}
+                                onLayout={(e) => { cardOffsetsRef.current[idx] = e.nativeEvent.layout.y; }}
+                            >
                                 <View style={{
                                     flexDirection: isRTL ? 'row-reverse' : 'row',
                                     justifyContent: 'space-between',
