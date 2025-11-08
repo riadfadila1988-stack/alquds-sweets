@@ -77,19 +77,21 @@ export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose
     });
   };
 
-  const handleTaskChange = useCallback((index: number, newTask: any) => {
+  // Update a task by its stable key. We avoid relying on a visual index because the list
+  // renders a filtered `visibleTasks` which may not match the full `tasks` index.
+  const handleTaskChange = useCallback((newTask: any) => {
+    if (!newTask) return;
+    const key = newTask._key ?? newTask._id;
     setTasks(prev => {
       const copy = [...prev];
-      // If newTask has a stable key, find the correct index by key to avoid index staleness after reorder
-      let idx = index;
-      try {
-        const key = newTask?._key ?? newTask?._id;
-        if (key) {
-          const found = copy.findIndex((t: any) => (t?._key ?? t?._id) === key);
-          if (found >= 0) idx = found;
+      if (key) {
+        const found = copy.findIndex((t: any) => (t?._key ?? t?._id) === key);
+        if (found >= 0) {
+          copy[found] = { ...copy[found], ...newTask };
+          return copy;
         }
-      } catch {}
-      copy[idx] = { ...copy[idx], ...newTask };
+      }
+      // Fallback: if no key or not found, try to merge using a best-effort index (no-op if out of range)
       return copy;
     });
   }, [setTasks]);
@@ -117,8 +119,35 @@ export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose
     setTasks(prev => prev.filter(t => t._key !== key));
   };
 
+  // We'll keep refs to child Task rows so we can flush their local state before submitting.
+  const taskRowRefs = useRef<Record<string, any>>({});
+
   const handleSubmit = () => {
-    onSubmit(tasks);
+    // Flush local state from child Task components (they expose `flush` via ref)
+    const flushed: Record<string, any> = {};
+    try {
+      Object.keys(taskRowRefs.current).forEach(k => {
+        const r = taskRowRefs.current[k];
+        if (r && typeof r.flush === 'function') {
+          try {
+            const payload = r.flush();
+            if (payload && (payload._key ?? payload._id)) {
+              flushed[payload._key ?? payload._id] = payload;
+            }
+          } catch (e) { /* ignore individual flush errors */ }
+        }
+      });
+    } catch (e) { /* ignore */ }
+
+    // Merge flushed payloads into the tasks array synchronously so onSubmit receives up-to-date values
+    const nextTasks = tasks.map(t => {
+      const key = t._key ?? t._id;
+      if (key && flushed[key]) return { ...t, ...flushed[key] };
+      return t;
+    });
+
+    setTasks(nextTasks);
+    onSubmit(nextTasks);
   };
 
   const handleDragEnd = ({ data }: { data: any[] }) => {
@@ -188,11 +217,24 @@ export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose
         <View style={styles.taskContent}>
           <Task
             task={task}
-            onChange={(newTask) => handleTaskChange(taskIndex, newTask)}
-            // Use key-based removal to ensure the correct task is removed
-            onRemove={() => removeTaskByKey(task._key)}
-            index={taskIndex}
-          />
+            // Pass only the updated task object; parent will find it by key
+            onChange={(newTask) => handleTaskChange(newTask)}
+             // Use key-based removal to ensure the correct task is removed
+             onRemove={() => removeTaskByKey(task._key)}
+             index={taskIndex}
+             // Attach a ref so we can call `flush()` on submit to capture any local edits that
+             // haven't been flushed via onBlur yet (name/description/duration).
+             ref={(r: any) => {
+               try {
+                 const key = task?._key ?? task?._id;
+                 if (!key) return;
+                 if (r) taskRowRefs.current[key] = r;
+                 else delete taskRowRefs.current[key];
+               } catch (e) {
+                 // ignore
+               }
+             }}
+           />
         </View>
       </View>
     );

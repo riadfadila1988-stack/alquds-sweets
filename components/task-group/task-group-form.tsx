@@ -6,6 +6,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
 import Task from './task';
+import { useMaterials } from '@/hooks/use-materials';
 
 interface TaskGroupFormProps {
   initialData?: ITaskGroup;
@@ -25,6 +26,9 @@ export default function TaskGroupForm({ initialData, onSubmit, onClose, isSaving
     (initialData?.tasks || []).map((t: any) => ({ ...t, _key: t._key ?? t._id ?? makeKey() })),
   );
   const listRef = useRef<any>(null);
+  const { materials } = useMaterials();
+  // refs for child Task components so we can flush their local state before submit (Android blurs may not fire)
+  const taskRefs = useRef<Record<string, any>>({});
 
   useEffect(() => {
     if (initialData) {
@@ -67,28 +71,45 @@ export default function TaskGroupForm({ initialData, onSubmit, onClose, isSaving
 
   const removeTaskByKey = (key: string) => {
     setTasks(prev => prev.filter(t => (t as any)._key !== key));
+    // remove any stored ref for removed key
+    if (taskRefs.current[key]) delete taskRefs.current[key];
   };
 
-  const handleSubmit = () => {
-    const taskGroupData: Partial<ITaskGroup> = {
-      name,
-      // produce a proper ITask[] shape for the API by providing defaults for missing fields
-      tasks: tasks.map((task: any) => ({
-        _id: task._id,
-        name: task.name ?? '',
-        duration: task.duration ?? 0,
-        description: task.description ?? '',
-        startAt: task.startAt ?? undefined,
-        usedMaterials: (task.usedMaterials || []).map((um: any) => ({
-          material: (um as any)?.material?._id ?? (um as any)?.material,
-          quantity: (um as any)?.quantity ?? 0,
-        })) as IUsedMaterial[],
-        producedMaterials: (task.producedMaterials || []).map((pm: any) => ({
-          material: (pm as any)?.material?._id ?? (pm as any)?.material,
-          quantity: (pm as any)?.quantity ?? 0,
-        })) as IUsedMaterial[],
-      })) as any,
-    };
+  const handleSubmit = async () => {
+    // Ensure any child local edits are flushed to parent state before we build the payload.
+    // This is important on Android where inputs may not blur when a submit button is pressed.
+    try { Keyboard.dismiss(); } catch {}
+    const flushed = tasks.map((task) => {
+      const key = (task as any)._key ?? (task as any)._id;
+      const r = key ? taskRefs.current[key] : null;
+      try {
+        if (r && typeof r.flush === 'function') {
+          // flush returns the latest payload representation
+          return r.flush();
+        }
+      } catch { }
+      return task;
+    });
+    // give React/Android a tiny moment to finish any pending composition/blur handling
+    await new Promise((res) => setTimeout(res, 50));
+
+    const finalTasks = (flushed || tasks).map((task: any) => ({
+      _id: task._id,
+      name: task.name ?? '',
+      duration: task.duration ?? 0,
+      description: task.description ?? '',
+      startAt: task.startAt ?? undefined,
+      usedMaterials: (task.usedMaterials || []).map((um: any) => ({
+        material: (um as any)?.material?._id ?? (um as any)?.material,
+        quantity: (um as any)?.quantity ?? 0,
+      })) as IUsedMaterial[],
+      producedMaterials: (task.producedMaterials || []).map((pm: any) => ({
+        material: (pm as any)?.material?._id ?? (pm as any)?.material,
+        quantity: (pm as any)?.quantity ?? 0,
+      })) as IUsedMaterial[],
+    }));
+
+    const taskGroupData: Partial<ITaskGroup> = { name, tasks: finalTasks as any };
     onSubmit(taskGroupData);
   };
 
@@ -155,10 +176,17 @@ export default function TaskGroupForm({ initialData, onSubmit, onClose, isSaving
         </TouchableOpacity>
         <View style={styles.taskContent}>
           <Task
+            ref={(el: any) => {
+              const key = (task as any)?._key ?? (task as any)?._id;
+              if (!key) return;
+              if (el) taskRefs.current[key] = el;
+              else delete taskRefs.current[key];
+            }}
             task={task}
             onChange={(newTask) => handleTaskChange(taskIndex, newTask)}
             onRemove={() => removeTaskByKey((task as any)._key ?? (task as any)._id)}
             index={taskIndex}
+            materials={materials}
           />
         </View>
       </View>

@@ -1,94 +1,83 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getMaterials as apiGetMaterials, createMaterial as apiCreateMaterial, updateMaterial as apiUpdateMaterial, updateMaterialQuantity as apiUpdateMaterialQuantity, deleteMaterial as apiDeleteMaterial } from '@/services/material';
 import { IMaterial } from '@/types/material';
 
 export function useMaterials() {
-  const [materials, setMaterials] = useState<IMaterial[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const fetchMaterials = useCallback(async () => {
+  const { data, isLoading, error, refetch } = useQuery<IMaterial[], Error>({
+    queryKey: ['materials'],
+    queryFn: apiGetMaterials,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: apiCreateMaterial,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['materials'] }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<IMaterial> }) => apiUpdateMaterial(id, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['materials'] }),
+  });
+
+  const updateQuantityMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { quantity?: number } }) => apiUpdateMaterialQuantity(id, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['materials'] }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: apiDeleteMaterial,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['materials'] }),
+  });
+
+  const create = useCallback(async (payload: Partial<IMaterial>) => {
     try {
-      setIsLoading(true);
-      setError(null);
-      const result = await apiGetMaterials();
-      // Expecting the server to return an array
-      setMaterials(result || []);
-    } catch (e) {
-      console.warn('fetchMaterials error', e);
-      setError('Failed to load materials');
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchMaterials();
-  }, [fetchMaterials]);
-
-  const create = useCallback(async (data: Partial<IMaterial>) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      await apiCreateMaterial(data);
-      await fetchMaterials();
+      await createMutation.mutateAsync(payload);
       return true;
-    } catch (e) {
-      console.warn('createMaterial error', e);
-      setError('Failed to create material');
+    } catch {
       return false;
-    } finally {
-      setIsLoading(false);
     }
-  }, [fetchMaterials]);
+  }, [createMutation]);
 
-  const update = useCallback(async (id: string, data: Partial<IMaterial>) => {
+  const update = useCallback(async (id: string, payload: Partial<IMaterial>) => {
     try {
-      setIsLoading(true);
-      setError(null);
-      await apiUpdateMaterial(id, data);
-      await fetchMaterials();
+      await updateMutation.mutateAsync({ id, data: payload });
       return true;
-    } catch (e) {
-      console.warn('updateMaterial error', e);
-      setError('Failed to update material');
+    } catch {
       return false;
-    } finally {
-      setIsLoading(false);
     }
-  }, [fetchMaterials]);
+  }, [updateMutation]);
 
-  const updateQuantity = useCallback(async (id: string, data: { quantity?: number }) => {
+  const updateQuantity = useCallback(async (id: string, payload: { quantity?: number }) => {
     try {
-      setIsLoading(true);
-      setError(null);
-      await apiUpdateMaterialQuantity(id, data);
-      await fetchMaterials();
+      await updateQuantityMutation.mutateAsync({ id, data: payload });
       return true;
-    } catch (e) {
-      console.warn('updateMaterialQuantity error', e);
-      setError('Failed to update material');
+    } catch {
       return false;
-    } finally {
-      setIsLoading(false);
     }
-  }, [fetchMaterials]);
+  }, [updateQuantityMutation]);
 
   const remove = useCallback(async (id: string) => {
     try {
-      setIsLoading(true);
-      setError(null);
-      await apiDeleteMaterial(id);
-      await fetchMaterials();
+      await deleteMutation.mutateAsync(id);
       return true;
-    } catch (e) {
-      console.warn('deleteMaterial error', e);
-      setError('Failed to delete material');
+    } catch {
       return false;
-    } finally {
-      setIsLoading(false);
     }
-  }, [fetchMaterials]);
+  }, [deleteMutation]);
 
-  return { materials, isLoading, error, refetch: fetchMaterials, create, update, updateQuantity, remove };
+  return {
+    materials: data || [],
+    isLoading,
+    error: error?.message ?? null,
+    refetch,
+    create,
+    update,
+    updateQuantity,
+    remove,
+  };
 }
