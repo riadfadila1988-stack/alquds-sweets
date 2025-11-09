@@ -28,12 +28,18 @@ const resources = {
         selectUnit: 'اختر الوحدة',
         selectMaterial: 'اختر مادة',
         searchMaterials: 'ابحث عن المواد',
+        materialGroups: 'مجموعات المواد',
+        addMaterialToGroup: 'إضافة مادة إلى مجموعة',
+        // Materials list button/label
+        materialsList: 'قائمة المواد',
         // Added translations for update-material-quantity screen
         updateMaterialsQuantity: 'تحديث كميات المواد',
         accessDenied: 'تم رفض الوصول. يقتصر الوصول على الموظفين.',
         invalidQuantity: 'الكمية غير صالحة',
         failedToSave: 'فشل في حفظ الكمية',
         saved: 'تم الحفظ',
+        // Saving status
+        saving: 'جاري الحفظ...',
         cancel: 'إلغاء',
         add: 'إضافة',
         nameRequired: 'الاسم مطلوب',
@@ -97,6 +103,8 @@ const resources = {
         stillWorking: 'ما زال يعمل',
         in: 'دخول:',
         out: 'خروج:',
+        // Back to groups (used in update-material-quantity screen)
+        backToGroups: 'العودة إلى المجموعات',
 
         // Work Status screen
         workStatus: 'حالة العمل',
@@ -164,6 +172,8 @@ const resources = {
         errorFetchingData: 'خطأ في جلب البيانات',
         remove: 'إزالة',
         newTaskGroup: 'مجموعة مهام جديدة',
+        // New material group screen title
+        newMaterialGroup: 'مجموعة مواد جديدة',
         planWorkDay: 'تخطيط يوم العمل',
         change: 'تغيير',
         set: 'تعيين',
@@ -217,12 +227,17 @@ const resources = {
         selectUnit: 'Select Unit',
         selectMaterial: 'Select material',
         searchMaterials: 'Search materials...',
+        materialGroups: 'Materials groups',
+        // Materials list button/label
+        materialsList: 'Materials list',
         // Added translations for update-material-quantity screen
         updateMaterialsQuantity: 'Update Materials Quantity',
         accessDenied: 'Access denied. Employees only.',
         invalidQuantity: 'Invalid quantity',
         failedToSave: 'Failed to save quantity',
         saved: 'Saved',
+        // Saving status
+        saving: 'Saving...',
         cancel: 'Cancel',
         add: 'Add',
         nameRequired: 'Name is required',
@@ -285,6 +300,8 @@ const resources = {
         stillWorking: 'Still working',
         in: 'In:',
         out: 'Out:',
+        // Back to groups (used in update-material-quantity screen)
+        backToGroups: 'Back to groups',
 
         // Work Status screen
         workStatus: 'Work Status',
@@ -352,6 +369,8 @@ const resources = {
         errorFetchingData: 'Error fetching data',
         remove: 'Remove',
         newTaskGroup: 'New Task Group',
+        // New material group screen title
+        newMaterialGroup: 'New Material Group',
         planWorkDay: 'Plan Work Day',
         change: 'Change',
         set: 'Set',
