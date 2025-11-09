@@ -35,12 +35,11 @@ export function useMaterialGroups() {
 }
 
 export function useMaterialGroup(id?: string) {
-  const { data, isLoading, error } = useQuery<any, Error>({
+  const { data, isLoading, error, refetch } = useQuery<any, Error>({
     queryKey: ['materialGroup', id],
     queryFn: () => (id ? getMaterialGroup(id) : Promise.resolve(null)),
     enabled: !!id,
   });
 
-  return { materialGroup: data, isLoading, error: error?.message };
+  return { materialGroup: data, isLoading, error: error?.message, refetch };
 }
-

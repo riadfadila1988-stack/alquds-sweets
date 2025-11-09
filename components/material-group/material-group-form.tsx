@@ -48,7 +48,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 14, fontWeight: '600', marginBottom: 6, textAlign: 'right'},
   input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 6, padding: 10 },
   materialRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f1f1f1' },
-  materialText: { fontSize: 15, textAlign: 'right' },
+  materialText: { fontSize: 15, textAlign: 'right', maxWidth: '90%' },
   checkbox: { width: 22, height: 22, borderRadius: 4, borderWidth: 1, borderColor: '#777', backgroundColor: '#fff' },
   checkboxChecked: { backgroundColor: '#007AFF' },
   btn: { padding: 12, borderRadius: 6, backgroundColor: '#007AFF', flex: 1, alignItems: 'center', justifyContent: 'center' },

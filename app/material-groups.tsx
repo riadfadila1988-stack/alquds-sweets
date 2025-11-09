@@ -36,7 +36,7 @@ export default function MaterialGroupsScreen() {
             <View style={styles.listHeader}>
               <Link href={'/materials'} asChild>
                 <TouchableOpacity style={styles.showMaterialsBtn}>
-                  <Text style={styles.showMaterialsBtnText}>{t('showAllMaterials') || 'Show all materials'}</Text>
+                  <Text style={styles.showMaterialsBtnText}>{t('materialsList') || 'Materials list'}</Text>
                 </TouchableOpacity>
               </Link>
             </View>
@@ -66,8 +66,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
   errorText: { color: 'red', textAlign: 'center', marginTop: 20 },
   empty: { textAlign: 'center', color: '#666', marginTop: 24 },
-  itemContainer: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  itemText: { fontSize: 16 },
+  itemContainer: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#eee',  },
+  itemText: { fontSize: 16, textAlign: 'right' },
   listHeader: { paddingBottom: 12 },
   showMaterialsBtn: { alignSelf: 'stretch', padding: 12, backgroundColor: '#e6f0ff', borderRadius: 8, marginBottom: 8 },
   showMaterialsBtnText: { color: '#0366d6', textAlign: 'center', fontWeight: '600' },

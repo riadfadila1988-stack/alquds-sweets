@@ -9,13 +9,15 @@ import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flat
 import MaterialListItem from '@/components/material/material-list-item';
 import { useMaterials } from '@/hooks/use-materials';
 import { MaterialIcons } from '@expo/vector-icons';
+import MaterialForm from '@/components/material/material-form';
 
 export default function EditMaterialGroupScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { update } = useMaterialGroups();
-  const { materials: allMaterials } = useMaterials();
+  // get materials and update helper to edit single materials
+  const { materials: allMaterials, update: updateMaterial, create: createMaterial } = useMaterials();
 
   const [group, setGroup] = useState<any | null>(null);
   const [localMaterials, setLocalMaterials] = useState<any[]>([]);
@@ -23,9 +25,40 @@ export default function EditMaterialGroupScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // edit material modal state
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editingMaterial, setEditingMaterial] = useState<any | null>(null);
+
   // picker modal state
   const [pickerVisible, setPickerVisible] = useState(false);
   const [pickerSearch, setPickerSearch] = useState('');
+
+  const openEditModal = (mat: any) => {
+    if (!mat) return;
+    // material can be id string or object
+    const m = typeof mat === 'string' ? (allMaterials || []).find((a: any) => String(a._id) === String(mat)) || { _id: mat, name: '' } : mat;
+    setEditingMaterial(m);
+    setEditModalVisible(true);
+  };
+
+  const closeEditModal = () => {
+    setEditModalVisible(false);
+    setEditingMaterial(null);
+  };
+
+  // wrapper to update a material and keep the group's localMaterials in sync
+  const handleMaterialUpdate = async (id: string, data: Partial<any>) => {
+    try {
+      const ok = await updateMaterial(String(id), data);
+      if (ok) {
+        setLocalMaterials(prev => prev.map(m => (String(m._id ?? m) === String(id) ? ({ ...m, ...data }) : m)));
+      }
+      return ok;
+    } catch (err) {
+      console.error('handleMaterialUpdate error', err);
+      return false;
+    }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -167,7 +200,8 @@ export default function EditMaterialGroupScreen() {
             keyExtractor={(item) => String(item._id ?? item)}
             renderItem={({ item, drag, isActive }: RenderItemParams<any>) => {
               return (
-                <TouchableOpacity onLongPress={drag} disabled={isActive} activeOpacity={0.9} style={{ marginBottom: 8 }}>
+                // open edit modal on press, keep long-press for drag
+                <TouchableOpacity  onLongPress={drag} disabled={isActive} activeOpacity={0.9} style={{ marginBottom: 8 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     {/* Delete button moved inside the card container and positioned absolutely at top-left */}
                     <View style={{ flex: 1, position: 'relative' }}>
@@ -190,7 +224,7 @@ export default function EditMaterialGroupScreen() {
                         <MaterialIcons name="delete" size={20} color="#d9534f" />
                       </TouchableOpacity>
 
-                      <MaterialListItem item={item} />
+                      <MaterialListItem onPress={() => openEditModal(item)} item={item} />
                     </View>
 
                     <TouchableOpacity
@@ -258,6 +292,15 @@ export default function EditMaterialGroupScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Edit material modal using shared MaterialForm component */}
+      <MaterialForm
+        visible={editModalVisible}
+        onClose={closeEditModal}
+        initialData={editingMaterial}
+        onUpdate={handleMaterialUpdate}
+        onCreate={createMaterial}
+      />
 
       {isSaving && (
         <View style={styles.centerOverlay} pointerEvents="none">

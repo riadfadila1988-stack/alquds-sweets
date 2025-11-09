@@ -2,13 +2,25 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Alert, RefreshControl } from 'react-native';
 import { useMaterials } from '@/hooks/use-materials';
 import { useAuth } from '@/hooks/use-auth';
+import { useMaterialGroups, useMaterialGroup } from '@/hooks/use-material-groups';
 import Header from './components/header';
 import { useTranslation } from './_i18n';
 import { useWorkingHours } from '@/hooks/use-working-hours';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function UpdateMaterialQuantityScreen() {
   const { t } = useTranslation();
-  const { materials, isLoading, error, updateQuantity, refetch } = useMaterials();
+  // selected group id needs to exist before hooks that depend on it
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+
+  const { materialGroups, isLoading: groupsLoading } = useMaterialGroups();
+  const { materialGroup, isLoading: groupLoading, refetch: refetchGroup } = useMaterialGroup(selectedGroupId ?? undefined);
+  // When a specific group is selected we fetch its materials from server; otherwise use all materials
+  const { materials: allMaterials, isLoading: materialsLoading, error, updateQuantity, refetch } = useMaterials();
+
+  // true when either the selected group is loading or (when no group) the materials list is loading
+  const loadingMaterials = selectedGroupId ? groupLoading : materialsLoading;
+
   const { user, isLoading: authLoading } = useAuth();
   const { currentSession } = useWorkingHours();
 
@@ -20,26 +32,30 @@ export default function UpdateMaterialQuantityScreen() {
   // App always RTL
   const isRTL = true;
 
-  // Initialize local edit values from materials
+  // Initialize local edit values from current materials source (group or all)
   useEffect(() => {
+    const source = selectedGroupId ? (materialGroup?.materials || []) : (allMaterials || []);
     const map: Record<string, string> = {};
-    (materials || []).forEach((m: any) => {
+    (source || []).forEach((m: any) => {
       const id = m._id ?? m.name;
       map[id] = m.quantity != null ? String(m.quantity) : '';
     });
     setEdits(map);
-  }, [materials]);
+  }, [allMaterials, materialGroup, selectedGroupId]);
 
   // Filter materials by search query (name or heName)
   const filteredMaterials = useMemo(() => {
     const q = (searchQuery || '').trim().toLowerCase();
-    if (!q) return materials || [];
-    return (materials || []).filter((m: any) => {
+    // choose material source
+    const source = selectedGroupId ? (materialGroup?.materials || []) : (allMaterials || []);
+    let list = source as any[];
+    if (!q) return list;
+    return list.filter((m: any) => {
       const name = (m.name || '').toString().toLowerCase();
       const he = (m.heName || '').toString().toLowerCase();
       return name.includes(q) || he.includes(q);
     });
-  }, [materials, searchQuery]);
+  }, [allMaterials, materialGroup, selectedGroupId, searchQuery]);
 
   const onChange = (id: string, value: string) => {
     // allow only numeric input, optional decimal and negative guard will be handled on save
@@ -82,6 +98,12 @@ export default function UpdateMaterialQuantityScreen() {
       setSavingIds((s) => ({ ...s, [id]: true }));
       const ok = await updateQuantity(id, { quantity: n });
       if (ok) {
+        // refresh group or all materials after a successful update
+        if (selectedGroupId) {
+          await refetchGroup?.();
+        } else {
+          await refetch?.();
+        }
         Alert.alert(t('saved') || 'Saved');
       } else {
         Alert.alert(t('failedToSave') || 'Failed to save quantity');
@@ -122,9 +144,43 @@ export default function UpdateMaterialQuantityScreen() {
     );
   }
 
+  // If no group selected show groups list first
+  if (!selectedGroupId) {
+    return (
+      <View style={styles.container}>
+        <Header title={t('updateMaterialsQuantity') || 'Update Materials'} />
+        <View style={{ padding: 16 }}>
+          {groupsLoading ? (
+            <ActivityIndicator />
+          ) : materialGroups && materialGroups.length > 0 ? (
+            <FlatList
+              data={materialGroups}
+              keyExtractor={(item: any) => item._id ?? item.name}
+              renderItem={({ item }: any) => (
+                <TouchableOpacity style={styles.groupRow} onPress={() => setSelectedGroupId(item._id ?? item.name)}>
+                  <Text style={styles.groupName}>{item.name}{item.heName ? ' | ' + item.heName : ''}</Text>
+                </TouchableOpacity>
+              )}
+            />
+          ) : (
+            <Text>{t('noGroups') || 'No material groups found'}</Text>
+          )}
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <Header title={t('updateMaterialsQuantity') || 'Update Materials'} />
+      <Header title={t('updateMaterialsQuantity') || 'Update Materials'} subtitle={selectedGroupId ? `${materialGroup?.name ?? ''}${materialGroup?.heName ? ' | ' + materialGroup.heName : ''}` : undefined} />
+
+      {/* Back to groups */}
+      <TouchableOpacity onPress={() => setSelectedGroupId(null)} style={{ paddingHorizontal: 16, paddingVertical: 8 }} accessibilityRole="button" accessibilityLabel={t('backToGroups') || 'Back to groups'}>
+        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' }}>
+          <Text style={{ color: '#1976D2', marginLeft: 6 }}>{t('backToGroups') || 'Back to groups'}</Text>
+          <Ionicons name="chevron-back" size={20} color="#1976D2" style={{ transform: [{ scaleX: isRTL ? -1 : 1 }] }} />
+        </View>
+      </TouchableOpacity>
 
       {/* Search label and input on same row (RTL-aware) */}
       <View style={[styles.searchContainerRow, isRTL ? { flexDirection: 'row-reverse' } : { flexDirection: 'row' }]}>
@@ -151,13 +207,14 @@ export default function UpdateMaterialQuantityScreen() {
         </View>
       </View>
 
-      {isLoading ? (
+      {loadingMaterials ? (
         <ActivityIndicator style={{ marginTop: 24 }} size="large" />
       ) : error ? (
         <View style={styles.centered}>
           <Text style={styles.error}>{error}</Text>
         </View>
       ) : (
+        // render materials list
         <FlatList
           data={filteredMaterials}
           ListEmptyComponent={() => (
@@ -239,6 +296,8 @@ const styles = StyleSheet.create({
   clearBtnText: { fontSize: 18 },
   noResultsContainer: { padding: 20, alignItems: 'center' },
   noResultsText: { color: '#666' },
+  groupRow: { paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#eee' },
+  groupName: { fontSize: 16, fontWeight: '600', textAlign: 'right' },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#eee' },
   name: { fontSize: 16, fontWeight: '600' },
   updated: { fontSize: 12, color: '#666' },

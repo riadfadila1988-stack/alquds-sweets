@@ -54,11 +54,6 @@ export default function AdminScreen() {
                         <Text style={styles.menuText}>{t('manageUsers') || 'Manage Users'}</Text>
                     </TouchableOpacity>
                 </Link>
-                <Link href="/materials" asChild>
-                    <TouchableOpacity style={styles.menuItem}>
-                        <Text style={styles.menuText}>{t('materialsManagement')}</Text>
-                    </TouchableOpacity>
-                </Link>
                 <Link href="/material-groups" asChild>
                     <TouchableOpacity style={styles.menuItem}>
                         <Text style={styles.menuText}>{t('materialsManagement')}</Text>
