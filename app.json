@@ -14,6 +14,9 @@
       "buildNumber": "1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
+      },
+      "entitlements": {
+        "aps-environment": "production"
       }
     },
     "android": {
@@ -25,7 +28,13 @@
       },
       "softwareKeyboardLayoutMode": "pan",
       "edgeToEdgeEnabled": true,
-      "package": "com.riadfadila.expotemplatedefault"
+      "package": "com.riadfadila.expotemplatedefault",
+      "permissions": [
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "WAKE_LOCK",
+        "POST_NOTIFICATIONS"
+      ]
     },
     "web": {
       "output": "static",
@@ -43,6 +52,15 @@
           "dark": {
             "backgroundColor": "#000000"
           }
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#ffffff",
+          "sounds": ["./assets/notification.wav"],
+          "mode": "production"
         }
       ],
       "./plugins/withRTLSupport.js"
