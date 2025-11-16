@@ -44,6 +44,11 @@ export default function AdminScreen() {
               }
             />
             <View style={styles.menu}>
+                <Link href="./statistics" asChild>
+                    <TouchableOpacity style={styles.menuItem}>
+                        <Text style={styles.menuText}>{t('statistics') || 'Statistics'}</Text>
+                    </TouchableOpacity>
+                </Link>
                 <Link href="/employees-hours" asChild>
                     <TouchableOpacity style={styles.menuItem}>
                         <Text style={styles.menuText}>{t('employeesHoursTitle')}</Text>
