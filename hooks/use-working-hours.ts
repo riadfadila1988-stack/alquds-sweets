@@ -140,7 +140,7 @@ export function useWorkingHours() {
   const formatDuration = useCallback((minutes: number) => {
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
-    return `${hours}h ${mins}m`;
+    return `${hours}h ${Math.floor(mins)}m`;
   }, []);
 
   return {

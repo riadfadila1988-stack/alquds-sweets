@@ -1,10 +1,12 @@
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import React, { useEffect, useMemo } from 'react';
 import { Platform, View, StyleSheet } from 'react-native';
-import { Slot } from 'expo-router';
+import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { initializeRTL, ensureRTL } from '@/utils/rtl';
+import {PaperProvider} from "react-native-paper";
+import { I18nProvider } from './_i18n';
 
 // CRITICAL: Initialize RTL at module level BEFORE any components render
 // This runs every time the module loads (including app restarts)
@@ -39,14 +41,105 @@ export default function RootLayout() {
   // Apply root container with proper RTL support
   // RTL layout direction is controlled by I18nManager.forceRTL()
   return (
-    <QueryClientProvider client={queryClient}>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <View style={styles.root}>
-          <StatusBar style="dark" backgroundColor="#ffffff" />
-          <Slot />
-        </View>
-      </GestureHandlerRootView>
-    </QueryClientProvider>
+      <I18nProvider defaultLang="ar">
+        <PaperProvider>
+          <QueryClientProvider client={queryClient}>
+            <GestureHandlerRootView style={{ flex: 1 }}>
+              <View style={styles.root}>
+                <StatusBar style="dark" backgroundColor="#ffffff" />
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    animation: 'slide_from_right',
+                    animationDuration: 300,
+                    fullScreenGestureEnabled: true,
+                    gestureEnabled: true,
+                    animationTypeForReplace: 'push',
+                  }}
+                >
+                  {/* ...existing Stack.Screen components... */}
+                  <Stack.Screen
+                    name="index"
+                    options={{
+                      animation: 'fade',
+                      animationDuration: 200,
+                    }}
+                  />
+                  <Stack.Screen
+                    name="admin"
+                    options={{
+                      animation: 'slide_from_right',
+                      gestureDirection: 'horizontal',
+                    }}
+                  />
+                  <Stack.Screen
+                    name="employee"
+                    options={{
+                      animation: 'slide_from_right',
+                      gestureDirection: 'horizontal',
+                    }}
+                  />
+                  <Stack.Screen
+                    name="statistics"
+                    options={{
+                      animation: 'slide_from_bottom',
+                      gestureDirection: 'vertical',
+                    }}
+                  />
+                  <Stack.Screen
+                    name="users"
+                    options={{
+                      animation: 'slide_from_right',
+                    }}
+                  />
+                  <Stack.Screen
+                    name="material-groups"
+                    options={{
+                      animation: 'slide_from_right',
+                    }}
+                  />
+                  <Stack.Screen
+                    name="task-groups"
+                    options={{
+                      animation: 'slide_from_right',
+                    }}
+                  />
+                  <Stack.Screen
+                    name="plan-work-day"
+                    options={{
+                      animation: 'slide_from_right',
+                    }}
+                  />
+                  <Stack.Screen
+                    name="work-status"
+                    options={{
+                      animation: 'slide_from_right',
+                    }}
+                  />
+                  <Stack.Screen
+                    name="employees-hours"
+                    options={{
+                      animation: 'slide_from_right',
+                    }}
+                  />
+                  <Stack.Screen
+                    name="today-tasks"
+                    options={{
+                      animation: 'slide_from_right',
+                    }}
+                  />
+                  <Stack.Screen
+                    name="dashboa"
+                    options={{
+                      animation: 'slide_from_right',
+                    }}
+                  />
+                </Stack>
+              </View>
+            </GestureHandlerRootView>
+          </QueryClientProvider>
+        </PaperProvider>
+      </I18nProvider>
   );
 }
 

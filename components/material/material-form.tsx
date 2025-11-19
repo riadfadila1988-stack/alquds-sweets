@@ -1,7 +1,25 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, KeyboardAvoidingView, TouchableWithoutFeedback, Keyboard, ScrollView, ActivityIndicator, Platform } from 'react-native';
-import { IMaterial } from '@/types/material';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Animated,
+  Easing,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
+  useWindowDimensions,
+} from 'react-native';
+import { Feather as Icon } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from '@/app/_i18n';
+import { IMaterial } from '@/types/material';
 
 export default function MaterialForm({
   visible,
@@ -17,34 +35,39 @@ export default function MaterialForm({
   onUpdate?: (id: string, data: Partial<IMaterial>) => Promise<boolean>;
 }) {
   const { t } = useTranslation();
+  const { width: windowWidth } = useWindowDimensions();
+
+  // keep prior default for now; ideally derive from i18n or context
+  const isRTL = true;
+
+  // form state
   const [name, setName] = useState('');
   const [quantity, setQuantity] = useState<string>('');
   const [unit, setUnit] = useState<string | undefined>(undefined);
-  const [showUnitPicker, setShowUnitPicker] = useState(false);
-  const UNITS = ['kg', 'g', 'pcs', 'ltr', 'pack', 'm'];
   const [heName, setHeName] = useState('');
   const [cost, setCost] = useState<string>('');
   const [minQuantity, setMinQuantity] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isRTL = true;
+  // animations
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current; // subtle translateY
+  const rotationAnim = useRef(new Animated.Value(0)).current; // 0..1
+  const rotationLoopRef = useRef<Animated.CompositeAnimation | null>(null);
 
-  // Populate fields when initialData changes (edit mode)
-  React.useEffect(() => {
-    if (initialData) {
-      setName(initialData.name ?? '');
-      setQuantity(initialData.quantity != null ? String(initialData.quantity) : '');
-      setUnit(initialData.unit ?? undefined);
-      setHeName(initialData.heName ?? '');
-      setCost(initialData.cost != null ? String(initialData.cost) : '');
-      setMinQuantity(initialData.notificationThreshold != null ? String(initialData.notificationThreshold) : '');
-      setShowUnitPicker(false);
-      setError(null);
-    } else {
-      reset();
-    }
-  }, [initialData]);
+  // per-input icon scale animations map
+  const iconScalesRef = useRef<Record<string, Animated.Value>>({});
+
+  // floating bubbles
+  const bubbleAnims = useRef(
+    [...Array(6)].map(() => ({
+      y: new Animated.Value(0),
+      x: new Animated.Value(0),
+      scale: new Animated.Value(0),
+    }))
+  ).current;
 
   const reset = () => {
     setName('');
@@ -53,51 +76,173 @@ export default function MaterialForm({
     setHeName('');
     setCost('');
     setMinQuantity('');
-    setShowUnitPicker(false);
     setError(null);
+    // hide bubbles
+    bubbleAnims.forEach((b) => b.scale.setValue(0));
   };
 
+  // seed values when opened
+  useEffect(() => {
+    if (visible) {
+      if (initialData) {
+        setName(initialData.name ?? '');
+        setHeName((initialData as any).heName ?? '');
+        setQuantity(
+          typeof initialData.quantity === 'number' && !Number.isNaN(initialData.quantity)
+            ? String(initialData.quantity)
+            : ''
+        );
+        setUnit((initialData as any).unit);
+        setMinQuantity(
+          typeof (initialData as any).notificationThreshold === 'number'
+            ? String((initialData as any).notificationThreshold)
+            : ''
+        );
+        setCost(
+          typeof (initialData as any).cost === 'number' && !Number.isNaN((initialData as any).cost)
+            ? String((initialData as any).cost)
+            : ''
+        );
+      } else {
+        reset();
+      }
+    }
+    // no need to run when values change otherwise
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  // entrance + decorative animations
+  useEffect(() => {
+    if (!visible) {
+      // cleanup
+      rotationLoopRef.current?.stop?.();
+      return;
+    }
+
+    // reset
+    opacityAnim.setValue(0);
+    scaleAnim.setValue(0.95);
+    slideAnim.setValue(20);
+
+    // header rotation
+    rotationAnim.setValue(0);
+    const loop = Animated.loop(
+      Animated.timing(rotationAnim, {
+        toValue: 1,
+        duration: 3000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+    rotationLoopRef.current = loop;
+
+    Animated.parallel([
+      Animated.timing(opacityAnim, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.ease),
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 6,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        friction: 8,
+        tension: 50,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    loop.start();
+
+    // bubbles: pop in with stagger then gentle float
+    bubbleAnims.forEach((bubble, i) => {
+      const delay = i * 120;
+      const yRange = -60 - Math.random() * 30;
+      const xRange = (Math.random() - 0.5) * 50;
+
+      Animated.sequence([
+        Animated.delay(delay),
+        Animated.spring(bubble.scale, { toValue: 1, friction: 6, useNativeDriver: true }),
+        Animated.parallel([
+          Animated.loop(
+            Animated.sequence([
+              Animated.timing(bubble.y, {
+                toValue: yRange,
+                duration: 2200 + i * 250,
+                easing: Easing.inOut(Easing.ease),
+                useNativeDriver: true,
+              }),
+              Animated.timing(bubble.y, {
+                toValue: 0,
+                duration: 2200 + i * 250,
+                easing: Easing.inOut(Easing.ease),
+                useNativeDriver: true,
+              }),
+            ])
+          ),
+          Animated.loop(
+            Animated.sequence([
+              Animated.timing(bubble.x, {
+                toValue: xRange,
+                duration: 1600 + i * 180,
+                easing: Easing.inOut(Easing.sin),
+                useNativeDriver: true,
+              }),
+              Animated.timing(bubble.x, {
+                toValue: -xRange,
+                duration: 1600 + i * 180,
+                easing: Easing.inOut(Easing.sin),
+                useNativeDriver: true,
+              }),
+            ])
+          ),
+        ]),
+      ]).start();
+    });
+
+    return () => {
+      rotationLoopRef.current?.stop?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
   const handleSubmit = async () => {
-    if (!name.trim()) {
-      setError(t('nameRequired'));
-      return;
-    }
-    if (!heName.trim()) {
-      setError(t('hebrewNameRequired'));
-      return;
-    }
-    if (!cost || Number.isNaN(Number(cost))) {
-      setError(t('costRequired'));
-      return;
-    }
-    setIsSubmitting(true);
     setError(null);
+    if (!name.trim()) {
+      setError(t('name') + ' ' + t('isRequired'));
+      // hide bubbles subtly as a cue
+      bubbleAnims.forEach((b) => {
+        Animated.timing(b.scale, { toValue: 0.8, duration: 200, useNativeDriver: true }).start();
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+
     const data: Partial<IMaterial> = {
       name: name.trim(),
       heName: heName.trim(),
-      quantity: quantity ? Number(quantity) : undefined,
+      quantity: quantity.trim().length ? Number(quantity) : undefined,
       unit: unit,
-      notificationThreshold: minQuantity ? Number(minQuantity) : 0,
-      cost: cost ? Number(cost) : undefined,
-    };
+      notificationThreshold: minQuantity.trim().length ? Number(minQuantity) : 0,
+      cost: cost.trim().length ? Number(cost) : undefined,
+    } as any;
+
     try {
-      if (initialData && initialData._id && onUpdate) {
-        const ok = await onUpdate(initialData._id, data);
-        if (ok) {
-          reset();
-          onClose();
-        } else {
-          setError(t('failedToCreateMaterial'));
-        }
+      if (initialData && (initialData as any)._id && onUpdate) {
+        const ok = await onUpdate(String((initialData as any)._id), data);
+        if (!ok) throw new Error('update-failed');
       } else {
         const ok = await onCreate(data);
-        if (ok) {
-          reset();
-          onClose();
-        } else {
-          setError(t('failedToCreateMaterial'));
-        }
+        if (!ok) throw new Error('create-failed');
       }
+      reset();
+      onClose();
     } catch {
       setError(t('failedToCreateMaterial'));
     } finally {
@@ -105,8 +250,62 @@ export default function MaterialForm({
     }
   };
 
+  // Small helper to render an input with an icon
+  const InputRow = ({
+    nameKey,
+    icon,
+    placeholder,
+    value,
+    onChangeText,
+    keyboardType,
+  }: {
+    nameKey: string;
+    icon: React.ComponentProps<typeof Icon>['name'];
+    placeholder: string;
+    value: string;
+    onChangeText: (v: string) => void;
+    keyboardType?: 'default' | 'numeric' | 'email-address' | 'phone-pad' | 'number-pad' | 'decimal-pad';
+  }) => {
+    if (!iconScalesRef.current[nameKey]) {
+      iconScalesRef.current[nameKey] = new Animated.Value(1);
+    }
+    const iconScale = iconScalesRef.current[nameKey];
+
+    const handleFocus = () => {
+      Animated.timing(iconScale, {
+        toValue: 1.12,
+        duration: 160,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.quad),
+      }).start();
+    };
+    const handleBlur = () => {
+      Animated.timing(iconScale, { toValue: 1, duration: 140, useNativeDriver: true }).start();
+    };
+
+    return (
+      <View style={[styles.inputRow, isRTL ? styles.rowRTL : styles.rowLTR]}>
+        <Animated.View style={[styles.iconBox, { transform: [{ scale: iconScale }] }]}>
+          <Icon name={icon} size={18} color="#fff" />
+        </Animated.View>
+        <TextInput
+          placeholder={placeholder}
+          value={value}
+          onChangeText={onChangeText}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+          style={[styles.input, isRTL ? styles.rtlText : styles.ltrText]}
+          keyboardType={keyboardType}
+          placeholderTextColor="#999"
+        />
+      </View>
+    );
+  };
+
+  const rotate = rotationAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose} transparent>
+    <Modal visible={visible} animationType="none" onRequestClose={onClose} transparent>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
@@ -114,52 +313,103 @@ export default function MaterialForm({
       >
         <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
           <View style={{ flex: 1, width: '100%', justifyContent: 'center', alignItems: 'center' }}>
-            <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 16 }} keyboardShouldPersistTaps="handled">
-              <View style={[styles.container, isRTL ? styles.containerRTL : styles.containerLTR]}>
-                <Text style={[styles.title, isRTL ? styles.rtlText : styles.ltrText]}>{initialData ? t('editMaterial') : t('addMaterial')}</Text>
-                <Text style={[styles.label, isRTL ? styles.rtlText : styles.ltrText]}>{t('name')}</Text>
-                <TextInput placeholder={t('name')} value={name} onChangeText={setName} style={[styles.input, isRTL ? styles.rtlText : styles.ltrText]} />
-
-                <Text style={[styles.label, isRTL ? styles.rtlText : styles.ltrText]}>{t('quantity')}</Text>
-                <TextInput placeholder={t('quantity')} value={quantity} onChangeText={setQuantity} style={[styles.input, isRTL ? styles.rtlText : styles.ltrText]} keyboardType="numeric" />
-
-                <Text style={[styles.label, isRTL ? styles.rtlText : styles.ltrText]}>{t('minQuantity')}</Text>
-                <TextInput placeholder={t('minQuantity')} value={minQuantity} onChangeText={setMinQuantity} style={[styles.input, isRTL ? styles.rtlText : styles.ltrText]} keyboardType="numeric" />
-
-                <Text style={[styles.label, isRTL ? styles.rtlText : styles.ltrText]}>{t('hebrewName')}</Text>
-                <TextInput placeholder={t('hebrewName')} value={heName} onChangeText={setHeName} style={[styles.input, isRTL ? styles.rtlText : styles.ltrText]} />
-
-                <Text style={[styles.label, isRTL ? styles.rtlText : styles.ltrText]}>{t('cost')}</Text>
-                <TextInput placeholder={t('cost')} value={cost} onChangeText={setCost} style={[styles.input, isRTL ? styles.rtlText : styles.ltrText]} keyboardType="numeric" />
-
-                {/* Unit selector */}
-                {/*<Text style={[styles.label, isRTL ? styles.rtlText : styles.ltrText]}>{t('selectUnit')}</Text>*/}
-                {/*<TouchableOpacity style={styles.input} onPress={() => setShowUnitPicker((s) => !s)}>*/}
-                {/*  <Text style={[styles.inputText, isRTL ? styles.rtlText : styles.ltrText]}>{unit ? (t(('unit_' + unit) as any) ?? unit) : t('selectUnit')}</Text>*/}
-                {/*</TouchableOpacity>*/}
-                {/*{showUnitPicker && (*/}
-                {/*  <View style={styles.unitList}>*/}
-                {/*    {UNITS.map((u) => (*/}
-                {/*      <TouchableOpacity key={u} style={[styles.unitItem, isRTL ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }]} onPress={() => { setUnit(u); setShowUnitPicker(false); }}>*/}
-                {/*        <Text style={[styles.unitText, isRTL ? styles.rtlText : styles.ltrText]}>{t(('unit_' + u) as any) ?? u}</Text>*/}
-                {/*       </TouchableOpacity>*/}
-                {/*    ))}*/}
-                {/*  </View>*/}
-                {/*)}*/}
-                {error ? <Text style={[styles.error, isRTL ? styles.rtlText : styles.ltrText]}>{error}</Text> : null}
-                {isSubmitting ? (
-                  <ActivityIndicator size="small" />
-                ) : (
-                  <View style={[styles.buttons, isRTL ? styles.buttonsRTL : styles.buttonsLTR]}>
-                    <TouchableOpacity style={[styles.modalActionBtn, { backgroundColor: '#777' }]} onPress={() => { reset(); onClose(); }}>
-                      <Text style={styles.modalActionText}>{t('cancel')}</Text>
+            <ScrollView
+              contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 16 }}
+              keyboardShouldPersistTaps="handled"
+            >
+              <Animated.View
+                style={[
+                  styles.container,
+                  { width: Math.min(820, Math.round(windowWidth * 0.96)) },
+                  isRTL ? styles.containerRTL : styles.containerLTR,
+                  styles.cardShadow,
+                  { opacity: opacityAnim, transform: [{ scale: scaleAnim }, { translateY: slideAnim }] },
+                ]}
+              >
+                {/* header */}
+                <LinearGradient colors={["#6a11cb", "#2575fc"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.headerGradientInline}>
+                  <View style={[styles.headerContentInline, isRTL ? styles.headerRowReverse : null]}>
+                    <TouchableOpacity onPress={onClose} style={[styles.closeCircle, isRTL ? { marginRight: 8 } : { marginLeft: 8 }]} accessibilityLabel={t('close')}>
+                      <LinearGradient colors={["#fff", "#f0f0f0"]} style={styles.closeCircleInner}>
+                        <Icon name="x" size={16} color="#333" />
+                      </LinearGradient>
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.modalActionBtn, { backgroundColor: '#007AFF' }]} onPress={handleSubmit}>
-                      <Text style={styles.modalActionText}>{initialData ? t('save') : t('add')}</Text>
-                    </TouchableOpacity>
+                    <Text style={[styles.titleInline, isRTL ? styles.rtlText : styles.ltrText]} numberOfLines={1} ellipsizeMode="tail">
+                      {initialData ? t('editMaterial') : t('addMaterial')}
+                    </Text>
+                    <Animated.View style={[styles.headerIconSmall, { transform: [{ rotate: rotate }] }]}>
+                      <Icon name="box" size={16} color="#fff" />
+                    </Animated.View>
                   </View>
-                )}
-              </View>
+                </LinearGradient>
+
+                {/* floating bubbles */}
+                {bubbleAnims.map((bubble, i) => (
+                  <Animated.View
+                    key={i}
+                    style={[
+                      styles.bubble,
+                      {
+                        left: `${15 + i * 14}%`,
+                        top: '12%',
+                        width: 20 + (i % 3) * 8,
+                        height: 20 + (i % 3) * 8,
+                        backgroundColor: ['#ff9a9e55', '#fad0c455', '#a18cd155', '#84fab055', '#fccb9055', '#8ec5fc55'][i],
+                        transform: [{ translateY: bubble.y }, { translateX: bubble.x }, { scale: bubble.scale }],
+                      },
+                    ]}
+                  />
+                ))}
+
+                {/* form sections */}
+                <View style={styles.section}>
+                  <Text style={[styles.label, isRTL ? styles.rtlText : styles.ltrText]}>{t('name')}</Text>
+                  <InputRow nameKey="name" icon="type" placeholder={t('name')} value={name} onChangeText={setName} />
+                </View>
+
+                <View style={styles.section}>
+                  <Text style={[styles.label, isRTL ? styles.rtlText : styles.ltrText]}>{t('quantity')}</Text>
+                  <InputRow nameKey="quantity" icon="bar-chart-2" placeholder={t('quantity')} value={quantity} onChangeText={setQuantity} keyboardType="numeric" />
+                </View>
+
+                <View style={styles.section}>
+                  <Text style={[styles.label, isRTL ? styles.rtlText : styles.ltrText]}>{t('minQuantity')}</Text>
+                  <InputRow nameKey="minQuantity" icon="alert-circle" placeholder={t('minQuantity')} value={minQuantity} onChangeText={setMinQuantity} keyboardType="numeric" />
+                </View>
+
+                <View style={styles.section}>
+                  <Text style={[styles.label, isRTL ? styles.rtlText : styles.ltrText]}>{t('hebrewName')}</Text>
+                  <InputRow nameKey="heName" icon="globe" placeholder={t('hebrewName')} value={heName} onChangeText={setHeName} />
+                </View>
+
+                <View style={styles.section}>
+                  <Text style={[styles.label, isRTL ? styles.rtlText : styles.ltrText]}>{t('cost')}</Text>
+                  <InputRow nameKey="cost" icon="dollar-sign" placeholder={t('cost')} value={cost} onChangeText={setCost} keyboardType="numeric" />
+                </View>
+
+                <View style={styles.section}>
+                  <Text style={[styles.label, isRTL ? styles.rtlText : styles.ltrText]}>{t('unit') || 'Unit'}</Text>
+                  <InputRow nameKey="unit" icon="tag" placeholder={t('unit') || 'Unit'} value={unit ?? ''} onChangeText={(v: string) => setUnit(v || undefined)} />
+                </View>
+
+                {error ? <Text style={[styles.error, isRTL ? styles.rtlText : styles.ltrText]}>{error}</Text> : null}
+
+                <View style={[styles.buttons, isRTL ? styles.buttonsRTL : styles.buttonsLTR]}>
+                  <TouchableOpacity onPress={onClose} style={[styles.button, styles.cancelBtn]} accessibilityLabel={t('cancel')}>
+                    <Text style={styles.cancelText}>{t('cancel')}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity onPress={handleSubmit} disabled={isSubmitting} style={[styles.button, styles.saveBtn]} accessibilityLabel={t('save')}>
+                    <LinearGradient colors={["#6a11cb", "#2575fc"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientFill}>
+                      {isSubmitting ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <Text style={styles.modalActionText}>{t('save')}</Text>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              </Animated.View>
             </ScrollView>
           </View>
         </TouchableWithoutFeedback>
@@ -169,36 +419,72 @@ export default function MaterialForm({
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)' },
-  container: { width: '90%', backgroundColor: '#fff', padding: 16, borderRadius: 8 },
+  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.45)' },
+  container: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 14,
+    overflow: 'hidden',
+  },
   containerRTL: { alignItems: 'flex-end' },
   containerLTR: { alignItems: 'flex-start' },
-  title: { fontSize: 18, fontWeight: '600', marginBottom: 12, textAlign: 'center' },
-  label: { fontSize: 14, color: '#333', marginBottom: 6 },
-  // make inputs full width of the modal container
-  input: { width: '100%', borderWidth: 1, borderColor: '#ddd', borderRadius: 6, padding: 10, marginBottom: 8, justifyContent: 'center' },
-  inputText: { },
-  unitList: { width: '100%', backgroundColor: '#fff', borderWidth: 1, borderColor: '#ddd', borderRadius: 6, marginBottom: 8 },
-  unitItem: { padding: 10 },
-  unitText: { fontSize: 16 },
-  // make buttons container full width and space the actions to the ends
-  buttons: { justifyContent: 'space-between', marginTop: 8, width: '100%' },
-  buttonsRTL: { flexDirection: 'row-reverse' },
-  buttonsLTR: { flexDirection: 'row' },
-  error: { color: 'red', marginBottom: 8 },
-  // RTL/LTR text helpers
-  rtlText: { textAlign: 'right', writingDirection: 'rtl' },
-  ltrText: { textAlign: 'left', writingDirection: 'ltr' },
-  modalActionBtn: {
-    flex: 1,
-    borderRadius: 6,
-    paddingVertical: 12,
-    marginHorizontal: 4,
+  cardShadow: { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.08, shadowRadius: 20, elevation: 12 },
+
+  headerGradientInline: { width: '100%', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 8 },
+  headerContentInline: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerRowReverse: { flexDirection: 'row-reverse' },
+  closeCircle: { width: 28, height: 28, borderRadius: 16, overflow: 'hidden' },
+  closeCircleInner: { flex: 1, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  titleInline: { flex: 1, textAlign: 'center', color: '#fff', fontSize: 16, fontWeight: '700' },
+  headerIconSmall: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.14)',
     justifyContent: 'center',
     alignItems: 'center',
+    marginHorizontal: 6,
   },
-  modalActionText: {
-    color: '#fff',
-    fontWeight: '500',
+
+  section: { width: '100%', marginTop: 8 },
+  label: { fontSize: 13, color: '#444', marginBottom: 6, marginTop: 6 },
+
+  inputRow: { width: '100%', alignItems: 'center' },
+  rowRTL: { flexDirection: 'row-reverse' },
+  rowLTR: { flexDirection: 'row' },
+  iconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#6a11cb',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 6,
+    shadowColor: '#6a11cb',
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  input: { flex: 1, borderWidth: 1, borderColor: '#eee', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, backgroundColor: '#fff' },
+
+  buttons: { width: '100%', marginTop: 14, alignItems: 'center' },
+  buttonsRTL: { flexDirection: 'row-reverse', justifyContent: 'space-between' },
+  buttonsLTR: { flexDirection: 'row', justifyContent: 'space-between' },
+  button: { flex: 1 },
+  saveBtn: { marginStart: 8 },
+  cancelBtn: { marginEnd: 8, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: '#f2f2f2' },
+  gradientFill: { paddingVertical: 12, justifyContent: 'center', alignItems: 'center', borderRadius: 10 },
+  modalActionText: { color: '#fff', fontWeight: '700' },
+  cancelText: { color: '#333', fontWeight: '600' },
+
+  rtlText: { textAlign: 'right' },
+  ltrText: { textAlign: 'left' },
+
+  error: { color: 'red', marginTop: 8 },
+
+  bubble: {
+    position: 'absolute',
+    borderRadius: 100,
   },
 });

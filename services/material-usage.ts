@@ -53,3 +53,46 @@ export const getAllUsage = async (
   return response.data;
 };
 
+// New helper: try multiple endpoints and normalize the logs to a consistent shape
+export const getMaterialLogs = async (materialId?: string) => {
+    if (materialId) {
+    try {
+      const data = await getMaterialHistory(materialId);
+        return (data || []).map((l: any) => {
+            // choose a timestamp candidate from multiple possible fields
+            const created = l.createdAt ?? l.date ?? l.timestamp ?? l.time ?? l.dt ?? l._created ?? l.created;
+
+            // format date as: day of month + time (e.g., "18 14:30")
+            let dateStr: any = created;
+            let time: any = '';
+            try {
+                const dt = new Date(created);
+                if (!isNaN(dt.getTime())) {
+                    time = dt.toLocaleTimeString(undefined, {hour: '2-digit', minute: '2-digit'});
+                    const day = dt.getDate().toString().padStart(2, '0');
+                    const month = (dt.getMonth() + 1).toString().padStart(2, '0');
+                    dateStr = `${day}/${month}`;
+                }
+            } catch {}
+
+            const quantityRaw = l.quantityChange;
+            const quantity = Math.abs(quantityRaw);
+
+            const employeeName = l.userId?.name;
+            const type = ((quantityRaw < 0) ? 'use' : 'add').toString();
+
+            return {
+                date: {day:dateStr, time},
+                quantity,
+                employeeName,
+                type,
+                raw: l,
+            };
+        });
+     } catch {
+        return [];
+     }
+   }
+
+  return [];
+};

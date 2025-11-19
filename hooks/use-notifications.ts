@@ -2,18 +2,13 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { getNotifications, markNotificationRead, markAllNotificationsRead, getMyNotifications, markNotificationReadForCurrentUser, markAllNotificationsReadForCurrentUser } from '@/services/notification';
 import { useAuth } from './use-auth';
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { registerPushToken } from '@/services/push-notifications';
+import Constants from 'expo-constants';
 
-// Set the notification handler for foreground notifications
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+// NOTE: We intentionally do NOT call Notifications.setNotificationHandler at module load
+// because importing 'expo-notifications' triggers automatic push-token registration
+// in some environments (Expo Go) which is no longer supported for Android push tokens.
 
 export function useNotifications() {
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -29,6 +24,14 @@ export function useNotifications() {
     if (pushTokenRegisteredRef.current || !user) return;
 
     try {
+      // If running inside Expo Go (managed client), skip native push registration.
+      // Expo removed Android push support from Expo Go (SDK 53+). Use a development build instead.
+      if (Constants.appOwnership === 'expo') {
+        console.log('Running in Expo Go - skipping native push registration. Use a development build for push notifications.');
+        pushTokenRegisteredRef.current = true; // prevent repeated attempts in this session
+        return;
+      }
+
       if (Platform.OS === 'web') {
         // Web Push Notifications
         if ('Notification' in window && 'serviceWorker' in navigator) {
@@ -48,6 +51,18 @@ export function useNotifications() {
         console.log('Push notifications only work on physical devices');
         return;
       }
+
+      // Lazy-load expo-notifications here to avoid importing it during module init
+      const Notifications = (await import('expo-notifications')) as typeof import('expo-notifications');
+
+      // Set the notification handler for foreground notifications
+      Notifications.setNotificationHandler(({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: true,
+        }),
+      } as any));
 
       // Request permissions
       const { status: existingStatus } = await Notifications.getPermissionsAsync();

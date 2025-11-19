@@ -16,6 +16,23 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view
 import { addUser } from '@/services/user';
 import { useTranslation } from './_i18n';
 import Header from './components/header';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+
+// Premium palette
+const premiumColors = {
+  backgroundGradient: ['#0f2027', '#203a43', '#2c5364'] as const,
+  cardGradient: ['#ffffff', '#f8fafb'] as const,
+  accent: '#0a7ea4',
+  accentLight: '#0ea5e9',
+  success: '#10b981',
+  danger: '#ef4444',
+  textPrimary: '#1A202C',
+  textSecondary: '#64748b',
+  inputBg: '#f8fafc',
+  inputBorder: '#e2e8f0',
+  inputBorderFocus: '#0a7ea4',
+};
 
 interface UserForm {
   name: string;
@@ -130,81 +147,94 @@ export default function AddUserScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
-        <KeyboardAwareScrollView
-          innerRef={(r) => (scrollRef.current = r)}
-          style={styles.container}
-          contentContainerStyle={[styles.contentContainer, { flexGrow: 1 }]}
-          enableOnAndroid
-          extraScrollHeight={Platform.OS === 'ios' ? 80 : 60}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={{ flex: 1 }}>
-            <Header title={t('addNewUser') || 'Add New User'} />
-            <View style={{ paddingHorizontal: 20 }}>
-              <Text style={styles.subtitle}>{t('addUserSubtitle')}</Text>
-            </View>
+    <LinearGradient colors={premiumColors.backgroundGradient} style={{ flex: 1 }}>
+      <Header title={t('addNewUser') || 'Add New User'} />
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
+          <KeyboardAwareScrollView
+            innerRef={(r) => (scrollRef.current = r)}
+            style={styles.container}
+            contentContainerStyle={[styles.contentContainer, { flexGrow: 1 }]}
+            enableOnAndroid
+            extraScrollHeight={Platform.OS === 'ios' ? 80 : 60}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={{ flex: 1 }}>
+              <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
+                <Text style={styles.subtitle}>{t('addUserSubtitle')}</Text>
+              </View>
 
             <View style={styles.form}>
               {/* Name Input */}
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>{`${t('name')} *`}</Text>
-                <TextInput
-                  style={[styles.input, errors.name && styles.inputError]}
-                  value={formData.name}
-                  onChangeText={(text) => updateField('name', text)}
-                  placeholder={t('enterUserName')}
-                  placeholderTextColor="#999"
-                  textAlign={isRTL ? 'right' : 'left'}
-                />
+                <View style={[styles.inputWrapper, errors.name && styles.inputWrapperError]}>
+                  <Ionicons name="person-outline" size={20} color={premiumColors.textSecondary} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    value={formData.name}
+                    onChangeText={(text) => updateField('name', text)}
+                    placeholder={t('enterUserName')}
+                    placeholderTextColor="#94a3b8"
+                    textAlign={isRTL ? 'right' : 'left'}
+                  />
+                </View>
                 {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
               </View>
 
               {/* ID Number Input */}
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>{`${t('idNumber')} *`}</Text>
-                <TextInput
-                  style={[styles.input, errors.idNumber && styles.inputError]}
-                  value={formData.idNumber}
-                  onChangeText={(text) => updateField('idNumber', text)}
-                  placeholder={t('enterIdNumber')}
-                  placeholderTextColor="#999"
-                  textAlign={isRTL ? 'right' : 'left'}
-                  autoCapitalize="none"
-                />
+                <View style={[styles.inputWrapper, errors.idNumber && styles.inputWrapperError]}>
+                  <Ionicons name="card-outline" size={20} color={premiumColors.textSecondary} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    value={formData.idNumber}
+                    onChangeText={(text) => updateField('idNumber', text)}
+                    placeholder={t('enterIdNumber')}
+                    placeholderTextColor="#94a3b8"
+                    textAlign={isRTL ? 'right' : 'left'}
+                    autoCapitalize="none"
+                  />
+                </View>
                 {errors.idNumber && <Text style={styles.errorText}>{errors.idNumber}</Text>}
               </View>
 
               {/* Password Input */}
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>{`${t('password')} *`}</Text>
-                <TextInput
-                  style={[styles.input, errors.password && styles.inputError]}
-                  value={formData.password}
-                  onChangeText={(text) => updateField('password', text)}
-                  placeholder={t('enterPassword')}
-                  placeholderTextColor="#999"
-                  textAlign={isRTL ? 'right' : 'left'}
-                  secureTextEntry
-                  autoCapitalize="none"
-                />
+                <View style={[styles.inputWrapper, errors.password && styles.inputWrapperError]}>
+                  <Ionicons name="lock-closed-outline" size={20} color={premiumColors.textSecondary} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    value={formData.password}
+                    onChangeText={(text) => updateField('password', text)}
+                    placeholder={t('enterPassword')}
+                    placeholderTextColor="#94a3b8"
+                    textAlign={isRTL ? 'right' : 'left'}
+                    secureTextEntry
+                    autoCapitalize="none"
+                  />
+                </View>
                 {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
               </View>
 
               {/* Confirm Password Input */}
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>{`${t('confirmPassword')} *`}</Text>
-                <TextInput
-                  style={[styles.input, errors.confirmPassword && styles.inputError]}
-                  value={formData.confirmPassword}
-                  onChangeText={(text) => updateField('confirmPassword', text)}
-                  placeholder={t('reEnterPassword')}
-                  placeholderTextColor="#999"
-                  textAlign={isRTL ? 'right' : 'left'}
-                  secureTextEntry
-                  autoCapitalize="none"
-                />
+                <View style={[styles.inputWrapper, errors.confirmPassword && styles.inputWrapperError]}>
+                  <Ionicons name="lock-closed-outline" size={20} color={premiumColors.textSecondary} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    value={formData.confirmPassword}
+                    onChangeText={(text) => updateField('confirmPassword', text)}
+                    placeholder={t('reEnterPassword')}
+                    placeholderTextColor="#94a3b8"
+                    textAlign={isRTL ? 'right' : 'left'}
+                    secureTextEntry
+                    autoCapitalize="none"
+                  />
+                </View>
                 {errors.confirmPassword && (
                   <Text style={styles.errorText}>{errors.confirmPassword}</Text>
                 )}
@@ -220,7 +250,14 @@ export default function AddUserScreen() {
                       formData.role === 'employee' && styles.roleButtonActive,
                     ]}
                     onPress={() => updateField('role', 'employee')}
+                    activeOpacity={0.8}
                   >
+                    <Ionicons
+                      name="briefcase-outline"
+                      size={20}
+                      color={formData.role === 'employee' ? premiumColors.accent : premiumColors.textSecondary}
+                      style={{ marginBottom: 4 }}
+                    />
                     <Text
                       style={[
                         styles.roleButtonText,
@@ -236,7 +273,14 @@ export default function AddUserScreen() {
                       formData.role === 'admin' && styles.roleButtonActive,
                     ]}
                     onPress={() => updateField('role', 'admin')}
+                    activeOpacity={0.8}
                   >
+                    <Ionicons
+                      name="shield-checkmark-outline"
+                      size={20}
+                      color={formData.role === 'admin' ? premiumColors.accent : premiumColors.textSecondary}
+                      style={{ marginBottom: 4 }}
+                    />
                     <Text
                       style={[
                         styles.roleButtonText,
@@ -254,25 +298,37 @@ export default function AddUserScreen() {
                 style={[styles.submitButton, loading && styles.submitButtonDisabled]}
                 onPress={handleSubmit}
                 disabled={loading}
+                activeOpacity={0.9}
               >
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.submitButtonText}>{t('addUser')}</Text>
-                )}
+                <LinearGradient
+                  colors={[premiumColors.accentLight, premiumColors.accent]}
+                  style={styles.submitButtonGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="person-add" size={22} color="#fff" style={{ marginEnd: 8 }} />
+                      <Text style={styles.submitButtonText}>{t('addUser')}</Text>
+                    </>
+                  )}
+                </LinearGradient>
               </TouchableOpacity>
             </View>
           </View>
         </KeyboardAwareScrollView>
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
+    backgroundColor: 'transparent',
   },
   contentContainer: {
     padding: 20,
@@ -285,53 +341,73 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#111827',
+    color: '#F7FAFC',
     marginBottom: 8,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#6b7280',
+    fontSize: 15,
+    color: '#CBD5E0',
     textAlign: isRTL ? 'right' : 'left',
+    lineHeight: 22,
   },
   form: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 20,
+    padding: 24,
+    marginHorizontal: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
   },
   inputGroup: {
     marginBottom: 20,
   },
   label: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-    textAlign: 'right', // Always align label text to the right
-    alignSelf: 'flex-end', // Move label to the right side
+    fontSize: 15,
+    fontWeight: '700',
+    color: premiumColors.textPrimary,
+    marginBottom: 10,
+    textAlign: 'right',
+    alignSelf: 'flex-end',
+    letterSpacing: 0.3,
+  },
+  inputWrapper: {
+    flexDirection: isRTL ? 'row-reverse' : 'row',
+    alignItems: 'center',
+    backgroundColor: premiumColors.inputBg,
+    borderWidth: 1.5,
+    borderColor: premiumColors.inputBorder,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+  },
+  inputWrapperError: {
+    borderColor: premiumColors.danger,
+    backgroundColor: '#fef2f2',
+  },
+  inputIcon: {
+    marginHorizontal: 8,
   },
   input: {
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    padding: 14,
+    flex: 1,
+    padding: 12,
     fontSize: 16,
-    color: '#111827',
+    color: premiumColors.textPrimary,
   },
   inputError: {
-    borderColor: '#ef4444',
+    borderColor: premiumColors.danger,
   },
   errorText: {
-    color: '#ef4444',
-    fontSize: 14,
-    marginTop: 4,
-    textAlign: 'right', // Always align error text to the right
-    alignSelf: 'flex-end', // Move error text to the right side
+    color: premiumColors.danger,
+    fontSize: 13,
+    marginTop: 6,
+    textAlign: 'right',
+    alignSelf: 'flex-end',
+    fontWeight: '500',
   },
   roleContainer: {
     flexDirection: isRTL ? 'row-reverse' : 'row',
@@ -339,23 +415,29 @@ const styles = StyleSheet.create({
   },
   roleButton: {
     flex: 1,
-    padding: 14,
+    padding: 16,
     borderWidth: 2,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
+    borderColor: premiumColors.inputBorder,
+    borderRadius: 12,
     alignItems: 'center',
+    backgroundColor: premiumColors.inputBg,
   },
   roleButtonActive: {
-    borderColor: '#3b82f6',
-    backgroundColor: '#eff6ff',
+    borderColor: premiumColors.accent,
+    backgroundColor: '#f0f9ff',
+    shadowColor: premiumColors.accent,
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   roleButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#6b7280',
+    fontSize: 15,
+    fontWeight: '700',
+    color: premiumColors.textSecondary,
   },
   roleButtonTextActive: {
-    color: '#3b82f6',
+    color: premiumColors.accent,
   },
   switchContainer: {
     flexDirection: isRTL ? 'row-reverse' : 'row',
@@ -365,27 +447,37 @@ const styles = StyleSheet.create({
   switchLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#374151',
+    color: premiumColors.textPrimary,
   },
   switchDescription: {
     fontSize: 14,
-    color: '#6b7280',
+    color: premiumColors.textSecondary,
     marginTop: 4,
     textAlign: isRTL ? 'right' : 'left',
   },
   submitButton: {
-    backgroundColor: '#3b82f6',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 10,
+    borderRadius: 14,
+    marginTop: 16,
+    overflow: 'hidden',
+    shadowColor: premiumColors.accent,
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
   },
   submitButtonDisabled: {
     opacity: 0.6,
   },
+  submitButtonGradient: {
+    flexDirection: 'row',
+    padding: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   submitButtonText: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 });

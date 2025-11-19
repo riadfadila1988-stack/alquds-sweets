@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Modal, FlatList, Keyboard, ActivityIndicator } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from '@/app/_i18n';
 import { MaterialIcons } from '@expo/vector-icons';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -42,8 +43,13 @@ export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose
   const [tasks, setTasks] = useState<any[]>(() => (initialTasks || []).map((it: any) => ({ ...it, _key: it._key ?? it._id ?? makeKey() })));
   const [showGroupsModal, setShowGroupsModal] = useState(false);
 
+  // Store latest task data in ref to avoid re-renders on field changes (preserves keyboard focus)
+  const tasksDataRef = useRef<any[]>(tasks);
+
   useEffect(() => {
-    setTasks((initialTasks || []).map((it: any) => ({ ...it, _key: it._key ?? it._id ?? makeKey() })));
+    const newTasks = (initialTasks || []).map((it: any) => ({ ...it, _key: it._key ?? it._id ?? makeKey() }));
+    setTasks(newTasks);
+    tasksDataRef.current = newTasks;
   }, [initialTasks]);
 
   const addTaskGroup = (group: any) => {
@@ -62,6 +68,7 @@ export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose
     }));
     setTasks(prev => {
       const newArr = [...prev, ...tasksOnly];
+      tasksDataRef.current = newArr; // Keep ref in sync
       // Allow the list to render, then scroll to the end so newly added tasks are visible
       setTimeout(() => {
         try {
@@ -79,27 +86,26 @@ export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose
 
   // Update a task by its stable key. We avoid relying on a visual index because the list
   // renders a filtered `visibleTasks` which may not match the full `tasks` index.
+  // Update the ref directly without triggering state update to preserve keyboard focus
   const handleTaskChange = useCallback((newTask: any) => {
     if (!newTask) return;
     const key = newTask._key ?? newTask._id;
-    setTasks(prev => {
-      const copy = [...prev];
-      if (key) {
-        const found = copy.findIndex((t: any) => (t?._key ?? t?._id) === key);
-        if (found >= 0) {
-          copy[found] = { ...copy[found], ...newTask };
-          return copy;
-        }
+
+    if (key) {
+      const found = tasksDataRef.current.findIndex((t: any) => (t?._key ?? t?._id) === key);
+      if (found >= 0) {
+        tasksDataRef.current[found] = { ...tasksDataRef.current[found], ...newTask };
       }
-      // Fallback: if no key or not found, try to merge using a best-effort index (no-op if out of range)
-      return copy;
-    });
-  }, [setTasks]);
+    }
+    // Don't call setTasks to avoid re-rendering the list and losing keyboard focus
+    // The data is stored in the ref and will be used during submit
+  }, []);
 
   const addTask = () => {
     const newTask = { _key: makeKey(), name: '', duration: 0, description: '', usedMaterials: [], producedMaterials: [] };
     setTasks(prev => {
       const newArr = [...prev, newTask];
+      tasksDataRef.current = newArr; // Keep ref in sync
       // Scroll to the end after adding the task so the new task is visible
       setTimeout(() => {
         try {
@@ -116,7 +122,11 @@ export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose
 
   // Preferred removal by stable key to avoid index staleness or touch/overlap issues
   const removeTaskByKey = (key: string) => {
-    setTasks(prev => prev.filter(t => t._key !== key));
+    setTasks(prev => {
+      const updated = prev.filter(t => t._key !== key);
+      tasksDataRef.current = updated; // Keep ref in sync
+      return updated;
+    });
   };
 
   // We'll keep refs to child Task rows so we can flush their local state before submitting.
@@ -134,24 +144,27 @@ export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose
             if (payload && (payload._key ?? payload._id)) {
               flushed[payload._key ?? payload._id] = payload;
             }
-          } catch (e) { /* ignore individual flush errors */ }
+          } catch { /* ignore individual flush errors */ }
         }
       });
-    } catch (e) { /* ignore */ }
+    } catch { /* ignore */ }
 
-    // Merge flushed payloads into the tasks array synchronously so onSubmit receives up-to-date values
-    const nextTasks = tasks.map(t => {
+    // Use tasksDataRef (most up-to-date) and merge with flushed payloads
+    const nextTasks = tasksDataRef.current.map(t => {
       const key = t._key ?? t._id;
       if (key && flushed[key]) return { ...t, ...flushed[key] };
       return t;
     });
 
+    // Update state with final data before submitting
     setTasks(nextTasks);
+    tasksDataRef.current = nextTasks;
     onSubmit(nextTasks);
   };
 
   const handleDragEnd = ({ data }: { data: any[] }) => {
     setTasks(data);
+    tasksDataRef.current = data; // Keep ref in sync
   };
 
   const listRef = useRef<any>(null);
@@ -252,20 +265,40 @@ export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose
     <Modal visible={showGroupsModal} transparent animationType="slide" onRequestClose={() => setShowGroupsModal(false)}>
       <View style={styles.modalOverlay}>
         <View style={[styles.modalInner, { maxHeight: '70%' }]}>
-          <Text style={[styles.label, { marginBottom: 8 }]}>{t('taskGroups') || 'Task Groups'}</Text>
+          <View style={styles.modalHeader}>
+            <MaterialIcons name="playlist-play" size={24} color="#FF6B9D" />
+            <Text style={styles.modalTitle}>{t('taskGroups') || 'Task Groups'}</Text>
+          </View>
           <FlatList
             data={taskGroups}
             keyExtractor={(g: any) => String(g._id ?? g.id ?? g.name)}
             renderItem={({ item: g }) => (
-              <TouchableOpacity style={[styles.groupBtn, { marginBottom: 8 }]} onPress={() => { addTaskGroup(g); setShowGroupsModal(false); }}>
-                <Text style={{ color: 'white' }}>{g.name}</Text>
+              <TouchableOpacity
+                style={styles.groupBtnContainer}
+                onPress={() => { addTaskGroup(g); setShowGroupsModal(false); }}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={['#4FACFE', '#00F2FE']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.groupBtn}
+                >
+                  <MaterialIcons name="playlist-add-check" size={20} color="#fff" />
+                  <Text style={styles.groupBtnText}>{g.name}</Text>
+                </LinearGradient>
               </TouchableOpacity>
             )}
             showsVerticalScrollIndicator={true}
           />
-          <View style={{ marginTop: 8, flexDirection: 'row', justifyContent: 'flex-end' }}>
-            <TouchableOpacity style={[styles.smallBtn, { backgroundColor: '#777' }]} onPress={() => setShowGroupsModal(false)}>
-              <Text style={{ color: 'white' }}>{t('cancel') || 'Cancel'}</Text>
+          <View style={styles.modalFooter}>
+            <TouchableOpacity
+              style={styles.modalCancelBtn}
+              onPress={() => setShowGroupsModal(false)}
+              activeOpacity={0.8}
+            >
+              <MaterialIcons name="close" size={18} color="#FF6B9D" />
+              <Text style={styles.modalCancelText}>{t('cancel') || 'Cancel'}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -281,63 +314,103 @@ export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose
         keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
       >
         {/* Header showing employee name and fixed action buttons (Add Group / Add Task) */}
-        <View style={[styles.headerRow, { marginBottom: 8 }, isRTL && styles.headerRowRtl]}>
-          <View style={{ flexDirection: 'column' }}>
-            <Text style={[styles.label, isRTL && styles.labelRtl]}>{employeeName || (t('employeeTasks') || 'Employee Tasks')}</Text>
-            {displayDate ? <Text style={styles.dateText}>{displayDate}</Text> : null}
-          </View>
-          <View style={[styles.headerActions, isRTL && styles.headerActionsRtl]}>
-            {taskGroups && taskGroups.length > 0 && (
+        <LinearGradient
+          colors={['#ffffff', '#f8f9ff']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.headerCard}
+        >
+          <View style={[styles.headerRow, isRTL && styles.headerRowRtl]}>
+            <View style={{ flexDirection: 'column', flex: 1 }}>
+              <View style={styles.employeeNameRow}>
+                <View style={styles.avatarCircle}>
+                  <Text style={styles.avatarText}>{employeeName?.charAt(0) || 'E'}</Text>
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={[styles.employeeNameText, isRTL && styles.labelRtl]}>
+                    {employeeName || (t('employeeTasks') || 'Employee Tasks')}
+                  </Text>
+                  {displayDate ? (
+                    <View style={styles.dateRow}>
+                      <MaterialIcons name="event" size={14} color="#FF6B9D" />
+                      <Text style={styles.dateText}>{displayDate}</Text>
+                    </View>
+                  ) : null}
+                </View>
+              </View>
+            </View>
+            <View style={[styles.headerActions, isRTL && styles.headerActionsRtl]}>
+              {taskGroups && taskGroups.length > 0 && (
+                <TouchableOpacity
+                  style={styles.iconBtn}
+                  onPress={() => setShowGroupsModal(true)}
+                  accessibilityLabel={t('addTaskGroup') || 'Add Task Group'}
+                  activeOpacity={0.75}
+                >
+                  <LinearGradient
+                    colors={['#4FACFE', '#00F2FE']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.iconBtnGradient}
+                  >
+                    <MaterialIcons name="playlist-add" size={20} color="#fff" />
+                  </LinearGradient>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={styles.iconBtn}
-                onPress={() => setShowGroupsModal(true)}
-                accessibilityLabel={t('addTaskGroup') || 'Add Task Group'}
+                onPress={addTask}
+                accessibilityLabel={t('addTask') || 'Add Task'}
                 activeOpacity={0.75}
               >
-                <MaterialIcons name="playlist-add" size={22} color="#007AFF" style={isRTL ? { transform: [{ scaleX: -1 }] } : undefined} />
+                <LinearGradient
+                  colors={['#FF6B9D', '#C86DD7']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.iconBtnGradient}
+                >
+                  <MaterialIcons name="add" size={20} color="#fff" />
+                </LinearGradient>
               </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={styles.iconBtn}
-              onPress={addTask}
-              accessibilityLabel={t('addTask') || 'Add Task'}
-              activeOpacity={0.75}
-            >
-              <MaterialIcons name="add" size={28} color="#007AFF" style={isRTL ? { transform: [{ scaleX: -1 }] } : undefined} />
-            </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        </LinearGradient>
 
         {/* Top action buttons (Submit / Cancel) moved from footer */}
         <View style={[styles.topButtonsContainer, isRTL && styles.topButtonsContainerRtl]}>
           <View style={[styles.buttonContainer, isRTL && styles.buttonContainerRtl]}>
             {/* show a spinner beside the button only while saving; position respects RTL */}
-            <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center' }}>
-              <TouchableOpacity
-                style={[styles.primaryButton, isSaving && styles.buttonDisabled]}
-                onPress={handleSubmit}
-                disabled={isSaving}
-                accessibilityLabel={isSaving ? (t('saving') || 'Saving...') : (t('submit') || 'Submit')}
+            <TouchableOpacity
+              style={[styles.primaryButton, isSaving && styles.buttonDisabled]}
+              onPress={handleSubmit}
+              disabled={isSaving}
+              accessibilityLabel={isSaving ? (t('saving') || 'Saving...') : (t('submit') || 'Submit')}
+            >
+              <LinearGradient
+                colors={['#4FACFE', '#00F2FE']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.primaryButtonGradient}
               >
-                  {isSaving && (
-                    <ActivityIndicator
-                      size="small"
-                      color={isRTL ? '#007AFF' : '#007AFF'}
-                      style={isRTL ? { marginLeft: 8 } : { marginRight: 8 }}
-                    />
-                  )}
+                {isSaving && (
+                  <ActivityIndicator
+                    size="small"
+                    color="#fff"
+                    style={isRTL ? { marginLeft: 8 } : { marginRight: 8 }}
+                  />
+                )}
                 <MaterialIcons name="save" size={18} color="#fff" />
                 <View style={{ width: 8 }} />
                 <Text style={styles.primaryButtonText}>{isSaving ? (t('saving') || 'Saving...') : (t('submit') || 'Submit')}</Text>
-              </TouchableOpacity>
-            </View>
+              </LinearGradient>
+            </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.secondaryButton]}
+              style={styles.secondaryButton}
               onPress={onClose}
               accessibilityLabel={t('cancel') || 'Cancel'}
             >
-              <MaterialIcons name="close" size={18} color="#d9534f" />
+              <MaterialIcons name="close" size={18} color="#FF6B9D" />
               <View style={{ width: 8 }} />
               <Text style={styles.secondaryButtonText}>{t('cancel') || 'Cancel'}</Text>
             </TouchableOpacity>
@@ -372,77 +445,359 @@ export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, },
-  scrollContainer: { flexGrow: 1, paddingBottom: 140 },
-  dateText: { fontSize: 14, color: '#666', marginTop: 4 },
-  label: { fontSize: 16, fontWeight: '600', marginTop: 12 },
-  labelRtl: { textAlign: 'right' },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  headerActions: { flexDirection: 'row', alignItems: 'center' },
-  headerRowRtl: { flexDirection: 'row-reverse' },
-  headerActionsRtl: { flexDirection: 'row-reverse' },
-  iconBtn: { paddingHorizontal: 8, paddingVertical: 6, marginLeft: 8, marginRight: 8 },
-  addButtonFull: { width: '100%', borderWidth: 1, borderColor: '#e6e6e6', borderRadius: 8, paddingVertical: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
-  draggableTaskContainer: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 12 },
-  draggableTaskActive: { opacity: 0.8, transform: [{ scale: 1.02 }] },
-  dragHandle: { width: 40, paddingTop: 16, paddingRight: 8, alignItems: 'center', justifyContent: 'flex-start' },
-  dragHandleRtl: { paddingRight: 0, paddingLeft: 8 },
-  taskContent: { flex: 1 },
-  topButtonsContainer: { marginBottom: 8 },
-  topButtonsContainerRtl: { flexDirection: 'row-reverse' },
-  footer: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingTop: 12, paddingBottom: 32, },
-  footerRtl: { flexDirection: 'row-reverse' },
-  buttonContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flex:1 },
-  buttonContainerRtl: { flexDirection: 'row-reverse' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
-  modalInner: { width: '90%', backgroundColor: '#fff', borderRadius: 12, padding: 16, elevation: 4 },
-  groupBtn: { backgroundColor: '#007AFF', borderRadius: 8, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
-  smallBtn: { borderRadius: 8, paddingVertical: 10, paddingHorizontal: 16 },
-  labelSmall: { fontSize: 14, fontWeight: '500' },
-  separator: { height: 1, backgroundColor: '#e6e6e6', marginVertical: 8 },
-  taskName: { fontSize: 16, fontWeight: '500' },
-  taskDescription: { fontSize: 14, color: '#666' },
-  taskDuration: { fontSize: 14, fontWeight: '500', marginTop: 4 },
-  usedMaterialsLabel: { fontSize: 14, fontWeight: '500', marginTop: 8 },
-  producedMaterialsLabel: { fontSize: 14, fontWeight: '500', marginTop: 8 },
-  materialList: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 },
-  materialItem: { backgroundColor: '#f0f0f0', borderRadius: 12, paddingVertical: 6, paddingHorizontal: 10, marginRight: 8, marginBottom: 8 },
-  removeButton: { position: 'absolute', top: 8, right: 8, padding: 4 },
-  emptyStateContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: 32 },
-  emptyStateText: { fontSize: 16, color: '#999' },
-  emptyStateButton: { marginTop: 16, backgroundColor: '#007AFF', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 24 },
-  emptyStateButtonText: { color: 'white', fontWeight: '500' },
-  primaryButton: {
+  container: {
+    flex: 1,
+    backgroundColor: '#f8f9ff',
+  },
+  scrollContainer: {
+    flexGrow: 1,
+    paddingBottom: 140,
+    paddingHorizontal: 16,
+  },
+  headerCard: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 16,
+    borderRadius: 20,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  employeeNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  avatarCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FF6B9D',
+    alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#FF6B9D',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  avatarText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  employeeNameText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#2d3748',
+  },
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  dateText: {
+    fontSize: 14,
+    color: '#7b8aa1',
+    marginLeft: 6,
+    fontWeight: '500',
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 12,
+    color: '#2d3748',
+  },
+  labelRtl: {
+    textAlign: 'right',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerRowRtl: {
+    flexDirection: 'row-reverse',
+  },
+  headerActionsRtl: {
+    flexDirection: 'row-reverse',
+  },
+  iconBtn: {
+    marginLeft: 8,
+  },
+  iconBtnGradient: {
+    borderRadius: 12,
+    padding: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  addButtonFull: {
+    width: '100%',
+    borderWidth: 2,
+    borderColor: '#e0e7ff',
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f8f9ff',
+    marginTop: 12,
+  },
+  draggableTaskContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: 12,
+  },
+  draggableTaskActive: {
+    opacity: 0.9,
+    transform: [{ scale: 1.02 }],
+  },
+  dragHandle: {
+    width: 40,
+    paddingTop: 16,
+    paddingRight: 8,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  dragHandleRtl: {
+    paddingRight: 0,
+    paddingLeft: 8,
+  },
+  taskContent: {
+    flex: 1,
+  },
+  topButtonsContainer: {
+    marginBottom: 12,
+    paddingHorizontal: 16,
+  },
+  topButtonsContainerRtl: {
+    flexDirection: 'row-reverse',
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingTop: 12,
+    paddingBottom: 32,
+  },
+  footerRtl: {
+    flexDirection: 'row-reverse',
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  buttonContainerRtl: {
+    flexDirection: 'row-reverse',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalInner: {
+    width: '90%',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 20,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#2d3748',
+    marginLeft: 12,
+  },
+  groupBtnContainer: {
+    marginBottom: 12,
+  },
+  groupBtn: {
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    shadowColor: '#4FACFE',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  groupBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  modalFooter: {
+    marginTop: 16,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  modalCancelBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#FF6B9D',
+    backgroundColor: '#fff',
+  },
+  modalCancelText: {
+    color: '#FF6B9D',
+    fontWeight: '600',
+    fontSize: 16,
+    marginLeft: 6,
+  },
+  smallBtn: {
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  labelSmall: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  separator: {
+    height: 1,
+    backgroundColor: '#e6e6e6',
+    marginVertical: 8,
+  },
+  taskName: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  taskDescription: {
+    fontSize: 14,
+    color: '#666',
+  },
+  taskDuration: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 4,
+  },
+  usedMaterialsLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 8,
+  },
+  producedMaterialsLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 8,
+  },
+  materialList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 4,
+  },
+  materialItem: {
+    backgroundColor: '#e0e7ff',
+    borderRadius: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  removeButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    padding: 4,
+  },
+  emptyStateContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 32,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: '#999',
+  },
+  emptyStateButton: {
+    marginTop: 16,
     backgroundColor: '#007AFF',
     borderRadius: 8,
     paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  emptyStateButtonText: {
+    color: 'white',
+    fontWeight: '500',
+  },
+  primaryButton: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#4FACFE',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  primaryButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
     paddingHorizontal: 16,
   },
   primaryButtonText: {
     color: 'white',
-    fontWeight: '500',
+    fontWeight: '600',
     fontSize: 16,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   secondaryButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'white',
-    borderRadius: 8,
-    paddingVertical: 12,
+    borderRadius: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#d9534f',
+    borderWidth: 2,
+    borderColor: '#FF6B9D',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   secondaryButtonText: {
-    color: '#d9534f',
-    fontWeight: '500',
+    color: '#FF6B9D',
+    fontWeight: '600',
     fontSize: 16,
   },
 });

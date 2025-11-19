@@ -1,7 +1,9 @@
+/* eslint-disable import/no-unused-modules */
 import React, {useMemo, useState, useRef, useEffect} from 'react';
-import {View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, Platform, Alert, KeyboardAvoidingView, Keyboard, UIManager}from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import Header from './components/header';
+import {View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, Platform, Alert, KeyboardAvoidingView, Keyboard, Animated, TextInput}from 'react-native';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+import { ScreenTemplate } from '@/components/ScreenTemplate';
 import {useUsers} from '@/hooks/use-users';
 import {useWorkDayPlan} from '@/hooks/use-work-day-plan';
 import {useThemeColor} from '@/hooks/use-theme-color';
@@ -9,15 +11,14 @@ import {useTranslation} from '@/app/_i18n';
 import {MaterialIcons} from '@expo/vector-icons';
 import {useMaterials} from '@/hooks/use-materials';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-// NOTE: don't import 'react-native-draggable-flatlist' statically because it
-// depends on react-native-reanimated which can throw on web (Value is not a constructor).
-// We'll require it at runtime only on native platforms.
 
 export default function PlanWorkDayScreen() {
     const {t} = useTranslation();
     // refs to manage scroll offset restoration when keyboard hides
     const flatListRef = useRef<FlatList<any> | null>(null);
     const prevOffsetRef = useRef<number>(0);
+    // Animated value to collapse header on scroll
+    const scrollY = useRef(new Animated.Value(0)).current;
     useEffect(() => {
         const onHide = () => {
             setTimeout(() => {
@@ -47,9 +48,21 @@ export default function PlanWorkDayScreen() {
     // No native draggable module is used.
 
     const {users: allUsers} = useUsers();
+    // Filter users to include only employees (declare early for dependent hooks)
+    const users = allUsers.filter(u => u.role === 'employee');
 
     // If a `date` query param is present (format YYYY-MM-DD) prefer it when initializing the screen.
-    const { date: dateParam } = useLocalSearchParams<{ date?: string }>();
+    // Also allow optional header color overrides to customize header gradient like other screens.
+    const { date: dateParam, headerColor1, headerColor2 } = useLocalSearchParams<{
+        date?: string;
+        headerColor1?: string;
+        headerColor2?: string;
+    }>();
+
+    // Header gradient colors - vibrant and energetic
+    const headerGrad1 = (headerColor1 as string) || '#FF6B9D';
+    const headerGrad2 = (headerColor2 as string) || '#4FACFE';
+    const headerGrad3 = '#C86DD7';
 
     // Parse YYYY-MM-DD as a local date to avoid UTC parsing behavior of new Date('YYYY-MM-DD')
     const parseISODate = (s?: string) => {
@@ -216,18 +229,31 @@ export default function PlanWorkDayScreen() {
         }));
     };
 
-    // Enable LayoutAnimation on Android (experimental flag)
-    useEffect(() => {
-        if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-            try { UIManager.setLayoutAnimationEnabledExperimental(true); } catch { /* ignore */ }
-        }
-    }, []);
-
     // Track which assignment (by user id) is currently expanded. Only one may be open at a time.
     const [openAssignmentUser, setOpenAssignmentUser] = useState<string | null>(null);
 
+    const TARGET_DAY_MINUTES = 480; // 8h reference for progress bars
+    const [employeeSearch, setEmployeeSearch] = useState('');
+    const filteredUsers = useMemo(() => {
+        if (!employeeSearch.trim()) return users;
+        const term = employeeSearch.trim().toLowerCase();
+        return users.filter(u => (u.name || u.idNumber || '').toLowerCase().includes(term));
+    }, [users, employeeSearch]);
+
+    // animated rotation for expand icons per assignment
+    const expandAnimMap = useRef(new Map<string, Animated.Value>()).current;
+    const getExpandAnim = (id: string) => {
+      if (!expandAnimMap.has(id)) expandAnimMap.set(id, new Animated.Value(0)); // 0 collapsed, 1 expanded
+      return expandAnimMap.get(id)!;
+    };
     const toggleAssignmentOpen = (userId: string) => {
-        setOpenAssignmentUser(prev => String(prev) === String(userId) ? null : String(userId));
+      setOpenAssignmentUser(prev => {
+        const next = prev === userId ? null : userId;
+        // animate rotation
+        const anim = getExpandAnim(userId);
+        Animated.timing(anim, { toValue: next === userId ? 1 : 0, duration: 220, useNativeDriver: true }).start();
+        return next;
+      });
     };
 
     // When materials become available, reconcile any already-added assignments
@@ -279,14 +305,14 @@ export default function PlanWorkDayScreen() {
     }, [plan, materials, resolveMaterialRef]);
 
     // Helper: calculate total minutes for a given user id from current assignments
-    const getTotalMinutesForUser = (userId: string) => {
+    const getTotalMinutesForUser = React.useCallback((userId: string) => {
         const assignment = assignments.find(a => String(a.user._id || a.user) === String(userId));
         if (!assignment || !assignment.tasks) return 0;
         return (assignment.tasks || []).reduce((sum: number, t: any) => {
             const dur = Number(t?.duration || 0);
             return sum + (Number.isFinite(dur) ? dur : 0);
         }, 0);
-    };
+    }, [assignments]);
 
     // Helper: format minutes as "Xh Ym" (omit zero parts)
     const formatMinutes = (totalMinutes: number) => {
@@ -347,9 +373,6 @@ export default function PlanWorkDayScreen() {
         });
     };
 
-    // Filter users to include only employees
-    const users = allUsers.filter(u => u.role === 'employee');
-
     const prevDay = () => {
         const d = new Date(date);
         d.setDate(d.getDate() - 1);
@@ -369,140 +392,6 @@ export default function PlanWorkDayScreen() {
     // point the way the user expects.
     const prevIconName = isRTL ? 'chevron-right' : 'chevron-right';
     const nextIconName = isRTL ? 'chevron-left' : 'chevron-left';
-
-    // Render header (everything above the assignments list)
-    const renderHeader = () => (
-        <>
-            <Header title={t('planWorkDay') || 'Plan Work Day'} />
-            <View style={[styles.dateRow, {flexDirection: 'row'}]}>
-
-                <TouchableOpacity onPress={prevDay} style={styles.arrowBtn}
-                                  accessibilityLabel={t('previousDay') || 'Previous day'}>
-                    <MaterialIcons name={nextIconName} size={28} color={textColor}/>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.dateDisplay} onPress={() => {
-                    setShowDatePicker(true);
-                    setEditingDate(isoDate);
-                }}>
-                    <Text style={[styles.dateTextCenter, {color: textColor}]}>{isoDate}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={nextDay} style={styles.arrowBtn}
-                                  accessibilityLabel={t('nextDay') || 'Next day'}>
-                    <MaterialIcons name={prevIconName} size={28} color={textColor}/>
-                </TouchableOpacity>
-
-            </View>
-
-            <Modal visible={showDatePicker} transparent animationType="slide"
-                   onRequestClose={() => setShowDatePicker(false)}>
-                <View style={styles.modalOverlay}>
-                    <View style={[styles.modalInner, {alignSelf: 'stretch'}]}>
-                        {/* Custom date picker: calendar, month picker, year picker */}
-                        <DatePickerContents show={showDatePicker} editing={editingDate} dateProp={date} />
-                    </View>
-                 </View>
-              </Modal>
-
-            <Text style={[styles.sectionTitle, {color: textColor, textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr'}]}>{t('employees') || 'Employees'}</Text>
-            {/* Employees shown as toggle-pill buttons so admin can quickly select/deselect employees */}
-            <View style={[styles.togglesContainer, {flexDirection: isRTL ? 'row-reverse' : 'row'}]}>
-                {users.map((u: any) => {
-                    const selected = assignments.find(a => String(a.user._id || a.user) === String(u._id));
-                    // If the employee has any task that was started or completed, we consider them locked
-                    const assignmentForUser = assignments.find(a => String(a.user._id || a.user) === String(u._id));
-                    const isLocked = !!assignmentForUser && Array.isArray(assignmentForUser.tasks) && (assignmentForUser.tasks || []).some((t: any) => !!t?.startTime || !!t?.endTime);
-                    return (
-                        <TouchableOpacity
-                            key={u._id}
-                            onPress={() => { if (!isLocked) toggleUser(u); }}
-                            disabled={isLocked}
-                            style={[
-                                styles.userToggle,
-                                selected ? styles.userToggleSelected : styles.userToggleUnselected,
-                                isLocked ? styles.userToggleDisabled : undefined,
-                            ]}
-                        >
-                            {/* Show name and total formatted time */}
-                            <Text
-                                style={[styles.userToggleText, selected && styles.userToggleTextSelected, {textAlign: isRTL ? 'right' : 'left'}]}>{(u.name || u.idNumber || u._id)}</Text>
-                        </TouchableOpacity>
-                    );
-                })}
-            </View>
-
-            <Text style={[styles.sectionTitle, {color: textColor, textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr'}]}>{t('assignments') || 'Assignments'}</Text>
-        </>
-    );
-
-    // Render each assignment (used by FlatList)
-    const renderAssignment = ({item: a, index: idx}: {item: any, index: number}) => {
-        const userId = String(a.user._id || a.user);
-        const isOpen = openAssignmentUser === userId;
-        const userObj = users.find(u => String(u._id) === String(a.user._id || a.user)) || {name: ('User ' + (idx + 1))};
-        return (
-            <View key={userId}
-                  style={[styles.assignmentCard, {backgroundColor: '#fafafa'}]}>
-                {/* Header: show user name with their total assigned time and a chevron to collapse/expand */}
-                <TouchableOpacity onPress={() => toggleAssignmentOpen(userId)}
-                                  style={{flexDirection: isRTL ? 'row-reverse' : 'row', justifyContent: 'space-between', alignItems: 'center'}}>
-                    <Text
-                        style={{fontWeight: '600', textAlign: isRTL ? 'right' : 'left'}}>{userObj.name + ' (' + formatMinutes(getTotalMinutesForUser(a.user._id || a.user)) + ')'}</Text>
-                    <View style={{flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center'}}>
-                        <TouchableOpacity onPress={() => router.push({ pathname: '/edit-employee-tasks/[id]', params: { id: userId, date: isoDate } })} style={{padding: 6, marginRight: isRTL ? 0 : 8, marginLeft: isRTL ? 8 : 0}} accessibilityLabel={t('editTasks') || 'Edit tasks'}>
-                            <MaterialIcons name="edit" size={20} color="#2196F3" />
-                        </TouchableOpacity>
-                        <MaterialIcons name={isOpen ? 'expand-less' : 'expand-more'} size={24} color="#666" />
-                    </View>
-                </TouchableOpacity>
-
-                {/* Only render the assignment details (tasks, buttons) when this assignment is open */}
-                {isOpen && (
-                    <View style={{marginTop: 8}}>
-                        {/* Render tasks with Up/Down arrow buttons for reordering on all platforms */}
-                        {(a.tasks || []).map((task: any, ti: number) => (
-                            <View key={ti} style={{flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'flex-start', marginVertical: 6}}>
-                                <View style={{flex: 1}} pointerEvents="box-none">
-                                    {/* Static read-only task card (replaces interactive Task component) */}
-                                    <View style={styles.staticTaskCard}>
-                                        <Text style={{fontWeight: '600', marginBottom: 4}}>{task?.name || (t('unnamedTask') || 'Unnamed task')}</Text>
-                                        <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 4}}>
-                                            <MaterialIcons name="access-time" size={16} color="#444" style={{marginRight: 6}} />
-                                            <Text style={{color: '#444'}}>{formatMinutes(task?.duration || 0)}</Text>
-                                        </View>
-                                        {/* scheduled start (startAt) */}
-                                        {task?.startAtString ? (
-                                            <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 4}}>
-                                                <MaterialIcons name="schedule" size={16} color="#444" style={{marginRight: 6}} />
-                                                <Text style={{color: '#444'}}>{task.startAtString}</Text>
-                                            </View>
-                                        ) : task?.startAt ? (
-                                            <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 4}}>
-                                                <MaterialIcons name="schedule" size={16} color="#444" style={{marginRight: 6}} />
-                                                <Text style={{color: '#444'}}>{formatStartAtDisplay(task.startAt)}</Text>
-                                            </View>
-                                        ) : null}
-                                        {task?.description ? <Text style={{color: '#666', marginBottom: 6, textAlign: 'right'}}>{task.description}</Text> : null}
-                                        {(task?.usedMaterials || []).length > 0 && (
-                                            <View style={{marginTop: 4}}>
-                                                <Text style={{fontWeight: '600', marginBottom: 2}}>{t('materials') || 'Materials'}:</Text>
-                                                {(task.usedMaterials || []).map((um: any, umi: number) => {
-                                                    const mat = resolveMaterialRef((um as any)?.material) ?? (um as any)?.material;
-                                                    const name = typeof mat === 'object' ? (mat.name ?? String(mat._id ?? mat.id ?? mat)) : String(mat);
-                                                    return (
-                                                        <Text key={umi} style={{color: '#555'}}>- {name} x {String((um as any)?.quantity ?? 0)}</Text>
-                                                    );
-                                                })}
-                                            </View>
-                                        )}
-                                    </View>
-                                </View>
-                            </View>
-                        ))}
-                    </View>
-                )}
-            </View>
-        );
-    };
 
     // --- Date picker component (moved inside PlanWorkDayScreen so it can access state) ---
     function DatePickerContents({ show, editing, dateProp }: { show: boolean; editing: string; dateProp: Date }) {
@@ -634,8 +523,8 @@ export default function PlanWorkDayScreen() {
 
                 <View style={{flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12}}>
                     <TouchableOpacity style={[styles.smallBtn, {marginRight: 8}]} onPress={() => {
-                        const edt = parseISODate(editing);
-                        const d = edt ?? new Date(pickerDate.getFullYear(), pickerDate.getMonth(), 1);
+                        // Apply the currently picked date (day may be from calendar view)
+                        const d = new Date(pickerDate);
                         setDate(d);
                         setEditingDate(formatDateLocal(d));
                         setShowDatePicker(false);
@@ -650,49 +539,403 @@ export default function PlanWorkDayScreen() {
          );
      }
 
-    return (
-        <KeyboardAvoidingView
-            style={{flex: 1}}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 80}
-        >
-            <SafeAreaView style={{flex: 1}} edges={['bottom']}>
-                {/* Fixed header + employees area (does not scroll) */}
-                {renderHeader()}
+    // Fun gradient palettes for user chips - vibrant and playful!
+    const userGradients = [
+      ['#FF6B9D', '#C86DD7'] as const, // Pink to Purple
+      ['#4FACFE', '#00F2FE'] as const, // Blue to Cyan
+      ['#FFB75E', '#ED8F03'] as const, // Orange glow
+      ['#A8E063', '#56AB2F'] as const, // Fresh green
+      ['#FA709A', '#FEE140'] as const, // Pink to Yellow
+      ['#30CFD0', '#330867'] as const, // Teal to Deep Purple
+      ['#FF9A56', '#FF5E62'] as const, // Coral sunset
+    ];
 
-                <FlatList
-                 ref={(r) => { flatListRef.current = r; }}
-                 onScroll={(e) => { prevOffsetRef.current = e.nativeEvent.contentOffset.y; }}
-                 scrollEventThrottle={16}
-                  data={assignments}
-                  keyExtractor={(item) => String(item.user._id || item.user)}
-                 ListEmptyComponent={() => (
-                    <Text style={{color: textColor, paddingHorizontal: 16}}>{t('noEmployeesSelected') || 'No employees selected'}</Text>
-                )}
-                 renderItem={renderAssignment}
-                 // FlatList should fill the available space under the fixed header
-                 style={[styles.fullHeight, {backgroundColor}]}
-                 // writingDirection is not present on some React Native TypeScript defs; cast the inline style to `any`
-                 contentContainerStyle={[styles.container, ({ writingDirection: isRTL ? 'rtl' : 'ltr' } as any)]}
-                 keyboardShouldPersistTaps={'handled'}
-                 keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-                 nestedScrollEnabled={true}
-                 />
-             </SafeAreaView>
-         </KeyboardAvoidingView>
+    // Total selected users
+    const totalSelectedUsers = assignments.length;
+    const totalMinutesAll = useMemo(() => {
+      return assignments.reduce((acc, a) => acc + getTotalMinutesForUser(a.user._id || a.user), 0);
+    }, [assignments, getTotalMinutesForUser]);
+
+    // Measured height of the chips + summary block so we can animate its collapse
+    const [chipAreaHeight, setChipAreaHeight] = useState(0);
+    const [chipsCollapsed, setChipsCollapsed] = useState(false);
+
+    // Modern header moved inside list
+    const renderHeader = () => (
+      <BlurView intensity={80} tint="light" style={styles.glassHeader}>
+        <Animated.View style={{
+        // interpolate vertical padding and overall opacity for subtle collapse effect
+        paddingVertical: scrollY.interpolate({ inputRange: [0, 120], outputRange: [8, 2], extrapolate: 'clamp' }),
+        opacity: scrollY.interpolate({ inputRange: [0, 120], outputRange: [1, 0.95], extrapolate: 'clamp' })
+      }}>
+      <LinearGradient
+        colors={['#ffffff', '#f8f9ff']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={styles.stickyHeaderContainer}
+      >
+        {/* Date navigation row - Fun card style */}
+        <View style={styles.dateCard}>
+          <LinearGradient
+            colors={['#FF6B9D', '#C86DD7']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.dateGradient}
+          >
+            <TouchableOpacity onPress={prevDay} style={styles.navIconBtnModern} accessibilityLabel={t('previousDay') || 'Previous day'}>
+              <MaterialIcons name={nextIconName} size={24} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.dateDisplayModern} onPress={() => { setShowDatePicker(true); setEditingDate(isoDate); }}>
+              <MaterialIcons name="event" size={20} color="#fff" style={{marginRight: 8}} />
+              <Text style={styles.dateTextModern}>{isoDate}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={nextDay} style={styles.navIconBtnModern} accessibilityLabel={t('nextDay') || 'Next day'}>
+              <MaterialIcons name={prevIconName} size={24} color="#fff" />
+            </TouchableOpacity>
+          </LinearGradient>
+        </View>
+
+        <View style={styles.sectionHeaderRow}>
+          <MaterialIcons name="people" size={22} color="#FF6B9D" />
+          <Text style={styles.sectionTitleModern}>{t('employees') || 'Team Members'} ✨</Text>
+          <TouchableOpacity
+            onPress={() => setChipsCollapsed(c => !c)}
+            style={{marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 18, backgroundColor: '#FF6B9D'}}
+            accessibilityLabel={chipsCollapsed ? (t('expand') || 'Expand') : (t('collapse') || 'Collapse')}
+          >
+            <MaterialIcons name={chipsCollapsed ? 'unfold-more' : 'unfold-less'} size={18} color="#fff" />
+            <Text style={{color:'#fff', fontSize:12, fontWeight:'700', marginLeft:4}}>{chipsCollapsed ? (t('show') || 'Show') : (t('hide') || 'Hide')}</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Animated.View
+          onLayout={(e) => { if (!chipAreaHeight) setChipAreaHeight(e.nativeEvent.layout.height); }}
+          style={{
+            overflow: 'hidden',
+            height: chipsCollapsed ? 0 : chipAreaHeight || undefined,
+            opacity: chipsCollapsed ? 0 : 1,
+            transform: [{ scaleY: chipsCollapsed ? 0.9 : 1 }]
+          }}
+        >
+        <View style={[styles.togglesContainerModern, {flexDirection: isRTL ? 'row-reverse' : 'row'}]}>
+          {filteredUsers.map((u: any, idx: number) => {
+             const selected = assignments.find(a => String(a.user._id || a.user) === String(u._id));
+             const assignmentForUser = assignments.find(a => String(a.user._id || a.user) === String(u._id));
+             const isLocked = !!assignmentForUser && Array.isArray(assignmentForUser.tasks) && (assignmentForUser.tasks || []).some((t: any) => !!t?.startTime || !!t?.endTime);
+             const grad = userGradients[idx % userGradients.length];
+             const scale = getScaleForUser(String(u._id));
+             const minutes = getTotalMinutesForUser(String(u._id));
+             const ratio = Math.min(1, minutes / TARGET_DAY_MINUTES);
+             return (
+               <Animated.View key={u._id} style={{ transform: [{ scale }], alignSelf: 'flex-start' }}>
+                 <TouchableOpacity
+                   onPress={() => { if (!isLocked) { animatePress(String(u._id)); toggleUser(u); } }}
+                   disabled={isLocked}
+                   activeOpacity={0.85}
+                 >
+                   <LinearGradient
+                     colors={selected ? grad : ['#f5f7ff', '#ffffff']}
+                     start={{ x: 0, y: 0 }}
+                     end={{ x: 1, y: 1 }}
+                     style={[
+                       styles.userChipModern,
+                       selected
+                         ? { shadowColor: '#FF6B9D', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 8 }
+                         : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 2 },
+                       isLocked ? { opacity: 0.6 } : null
+                     ]}
+                   >
+                     <View style={[styles.userChipContent, selected && styles.userChipContentSelected]}>
+                       {selected ? (
+                         <View style={styles.checkBadge}>
+                           <MaterialIcons name="check-circle" size={18} color="#fff" />
+                         </View>
+                       ) : (
+                         <MaterialIcons name="person-outline" size={18} color="#7b8aa1" />
+                       )}
+                       <View style={{marginLeft:10}}>
+                         <Text numberOfLines={1} style={[styles.userChipTextModern, selected && styles.userChipTextSelected]}>
+                           {u.name || u.idNumber || u._id}
+                         </Text>
+                         {selected && minutes > 0 && (
+                           <View style={styles.progressBarOuterModern}>
+                             <LinearGradient
+                               colors={['#FFD700', '#FFA500']}
+                               start={{ x: 0, y: 0 }}
+                               end={{ x: 1, y: 0 }}
+                               style={[styles.progressBarInnerModern, {width: `${ratio*100}%`}]}
+                             />
+                           </View>
+                         )}
+                       </View>
+                       {selected && minutes > 0 && (
+                         <View style={styles.minutesBadgeModern}>
+                           <MaterialIcons name="schedule" size={12} color="#fff" />
+                           <Text style={styles.minutesBadgeText}>{formatMinutes(minutes)}</Text>
+                         </View>
+                       )}
+                     </View>
+                   </LinearGradient>
+                 </TouchableOpacity>
+               </Animated.View>
+             );
+           })}
+         </View>
+
+         {/* Summary chips - More playful */}
+         <View style={styles.selectedSummaryRowModern}>
+           <LinearGradient colors={['#4FACFE', '#00F2FE']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.summaryChipModern}>
+             <MaterialIcons name="group" size={18} color="#fff" />
+             <Text style={styles.summaryChipTextModern}>{totalSelectedUsers} {t('selected') || 'selected'}</Text>
+           </LinearGradient>
+           <LinearGradient colors={['#FFB75E', '#ED8F03']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.summaryChipModern}>
+             <MaterialIcons name="access-time" size={18} color="#fff" />
+             <Text style={styles.summaryChipTextModern}>{formatMinutes(totalMinutesAll)}</Text>
+           </LinearGradient>
+         </View>
+        </Animated.View>
+
+        <View style={styles.sectionHeaderRow}>
+          <MaterialIcons name="assignment" size={22} color="#4FACFE" />
+          <Text style={styles.sectionTitleModern}>{t('assignments') || 'Work Assignments'} 📋</Text>
+        </View>
+      </LinearGradient>
+     </Animated.View>
+    </BlurView>
+  );
+
+    // Enhance assignment card style: vibrant gradient borders + playful design
+    const renderAssignment = ({item: a, index: idx}: {item: any, index: number}) => {
+      const userId = String(a.user._id || a.user);
+      const isOpen = openAssignmentUser === userId;
+      const rotationAnim = getExpandAnim(userId);
+      const rotateStyle = { transform: [{ rotate: rotationAnim.interpolate({ inputRange:[0,1], outputRange:['0deg','180deg'] }) }] };
+      const userObj = users.find(u => String(u._id) === String(a.user._id || a.user)) || {name: ('User ' + (idx + 1))};
+      const minutes = getTotalMinutesForUser(a.user._id || a.user);
+      const ratio = Math.min(1, minutes / TARGET_DAY_MINUTES);
+      const cardGrad = userGradients[(idx * 2) % userGradients.length];
+
+      return (
+        <View key={userId} style={styles.assignmentOuterModern}>
+          <LinearGradient
+            colors={[...cardGrad, '#ffffff']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.assignmentGradientModern}
+          >
+            <View style={styles.assignmentInnerModern}>
+              <TouchableOpacity onPress={() => toggleAssignmentOpen(userId)} style={styles.assignmentHeaderModern} activeOpacity={0.85}>
+                <View style={{flex:1}}>
+                  <View style={styles.assignmentTitleRow}>
+                    <View style={styles.avatarCircle}>
+                      <Text style={styles.avatarText}>{userObj.name?.charAt(0) || 'U'}</Text>
+                    </View>
+                    <View style={{flex: 1, marginLeft: 12}}>
+                      <Text style={styles.assignmentTitleModern}>{userObj.name}</Text>
+                      <View style={styles.timeRow}>
+                        <MaterialIcons name="schedule" size={14} color="#a0a0c0" />
+                        <Text style={styles.timeText}>{formatMinutes(minutes)}</Text>
+                      </View>
+                    </View>
+                  </View>
+                  {minutes > 0 && (
+                    <View style={styles.progressBarOuterCard}>
+                      <LinearGradient
+                        colors={cardGrad}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={[styles.progressBarInnerCard, {width: `${ratio*100}%`}]}
+                      />
+                    </View>
+                  )}
+                </View>
+                <View style={styles.assignmentHeaderIconsModern}>
+                  <TouchableOpacity
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      router.push({ pathname: '/edit-employee-tasks/[id]', params: { id: userId, date: isoDate } });
+                    }}
+                    style={styles.editBtnModern}
+                    accessibilityLabel={t('editTasks') || 'Edit tasks'}
+                  >
+                    <LinearGradient colors={['#FF6B9D', '#C86DD7']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.editBtnGradient}>
+                      <MaterialIcons name="edit" size={16} color="#fff" />
+                    </LinearGradient>
+                  </TouchableOpacity>
+                  <Animated.View style={[styles.expandIconContainer, rotateStyle]}>
+                    <MaterialIcons name="expand-more" size={28} color="#FF6B9D" />
+                  </Animated.View>
+                </View>
+              </TouchableOpacity>
+
+              {isOpen && (
+                <View style={styles.tasksContainer}>
+                  {(a.tasks || []).length === 0 ? (
+                    <View style={styles.emptyTasksCard}>
+                      <MaterialIcons name="inbox" size={40} color="#e0e0e0" />
+                      <Text style={styles.emptyTasksText}>{t('noTasks') || 'No tasks yet'}</Text>
+                    </View>
+                  ) : (
+                    (a.tasks || []).map((task: any, ti: number) => (
+                      <View key={ti} style={styles.taskRowFun}>
+                        <LinearGradient
+                          colors={['#ffffff', '#fafbff']}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.taskCardFun}
+                        >
+                          <View style={styles.taskNumberBadge}>
+                            <Text style={styles.taskNumberText}>{ti + 1}</Text>
+                          </View>
+                          <View style={{flex: 1}}>
+                            <Text style={styles.taskTitleFun}>{task?.name || (t('unnamedTask') || 'Unnamed task')}</Text>
+                            <View style={styles.taskMetaContainer}>
+                              <View style={styles.taskMetaBadge}>
+                                <MaterialIcons name="access-time" size={14} color="#4FACFE" />
+                                <Text style={styles.taskMetaTextFun}>{formatMinutes(task?.duration || 0)}</Text>
+                              </View>
+                              {(task?.startAtString || task?.startAt) && (
+                                <View style={styles.taskMetaBadge}>
+                                  <MaterialIcons name="schedule" size={14} color="#FFB75E" />
+                                  <Text style={styles.taskMetaTextFun}>
+                                    {task?.startAtString || formatStartAtDisplay(task.startAt)}
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                            {task?.description && (
+                              <Text style={styles.taskDescFun}>{task.description}</Text>
+                            )}
+                            {(task?.usedMaterials || []).length > 0 && (
+                              <View style={styles.materialsBlockFun}>
+                                <View style={styles.materialsHeader}>
+                                  <MaterialIcons name="inventory" size={14} color="#A8E063" />
+                                  <Text style={styles.materialsTitleFun}>{t('materials') || 'Materials'}</Text>
+                                </View>
+                                {(task.usedMaterials || []).map((um: any, umi: number) => {
+                                  const mat = resolveMaterialRef((um as any)?.material) ?? (um as any)?.material;
+                                  const name = typeof mat === 'object' ? (mat.name ?? String(mat._id ?? mat.id ?? mat)) : String(mat);
+                                  return (
+                                    <View key={umi} style={styles.materialItem}>
+                                      <View style={styles.materialDot} />
+                                      <Text style={styles.materialLineFun}>{name} × {String((um as any)?.quantity ?? 0)}</Text>
+                                    </View>
+                                  );
+                                })}
+                              </View>
+                            )}
+                          </View>
+                        </LinearGradient>
+                      </View>
+                    ))
+                  )}
+                </View>
+              )}
+            </View>
+          </LinearGradient>
+        </View>
+      );
+    };
+
+    const chipScaleMap = useRef(new Map<string, Animated.Value>()).current;
+    const getScaleForUser = (id: string) => {
+      if (!chipScaleMap.has(id)) chipScaleMap.set(id, new Animated.Value(1));
+      return chipScaleMap.get(id)!;
+    };
+    const animatePress = (id: string) => {
+      const v = getScaleForUser(id);
+      Animated.sequence([
+        Animated.timing(v, { toValue: 0.94, duration: 90, useNativeDriver: true }),
+        Animated.spring(v, { toValue: 1, friction: 6, useNativeDriver: true })
+      ]).start();
+    };
+
+    return (
+        <ScreenTemplate
+            title={t('planWorkDay') || 'Plan Work Day'}
+            showBackButton={true}
+            headerGradient={[headerGrad1, headerGrad2, headerGrad3] as any}
+        >
+            <KeyboardAvoidingView
+                style={{flex: 1}}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 80}
+            >
+                <View style={{flex: 1}}>
+                   {/* Search bar - Playful design (not sticky) */}
+                   <View style={[styles.searchBarContainerModern, { marginHorizontal: 16, marginTop: 12, marginBottom: 8 }]}>
+                     <MaterialIcons name="search" size={20} color="#FF6B9D" style={{marginRight:10}} />
+                     <TextInput
+                       value={employeeSearch}
+                       onChangeText={setEmployeeSearch}
+                       placeholder={t('searchEmployees') || '🔍 Search employees...'}
+                       placeholderTextColor="#a0a0c0"
+                       style={styles.searchInputModern}
+                       returnKeyType="search"
+                       blurOnSubmit={false}
+                     />
+                     {employeeSearch.length > 0 && (
+                       <TouchableOpacity onPress={() => setEmployeeSearch('')} accessibilityLabel={t('clear') || 'Clear'}>
+                         <MaterialIcons name="cancel" size={20} color="#FF6B9D" />
+                       </TouchableOpacity>
+                     )}
+                   </View>
+                   {/* Date Picker Modal (non-sticky) */}
+                   <Modal
+                     visible={showDatePicker}
+                     transparent
+                     animationType="fade"
+                     onRequestClose={() => setShowDatePicker(false)}
+                   >
+                     <View style={styles.modalOverlay}>
+                       <View style={[styles.modalInner, { alignSelf: 'stretch' }]}>
+                         <DatePickerContents show={showDatePicker} editing={editingDate} dateProp={date} />
+                       </View>
+                     </View>
+                   </Modal>
+                    <FlatList
+                        ref={(r) => { flatListRef.current = r; }}
+                        onScroll={(e) => {
+                          const y = e.nativeEvent.contentOffset.y;
+                          prevOffsetRef.current = y;
+                          scrollY.setValue(y);
+                        }}
+                        scrollEventThrottle={16}
+                        data={assignments}
+                        keyExtractor={(item) => String(item.user._id || item.user)}
+                        ListEmptyComponent={() => (
+                            <Text style={{color: textColor, paddingHorizontal: 16}}>{t('noEmployeesSelected') || 'No employees selected'}</Text>
+                        )}
+                        ListHeaderComponent={renderHeader}
+                        stickyHeaderIndices={[0]}
+                        renderItem={renderAssignment}
+                        style={[styles.fullHeight, {backgroundColor}]}
+                        contentContainerStyle={[styles.container, ({ writingDirection: isRTL ? 'rtl' : 'ltr' } as any)]}
+                        keyboardShouldPersistTaps={'always'}
+                        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                        nestedScrollEnabled={true}
+
+                    />
+                </View>
+            </KeyboardAvoidingView>
+        </ScreenTemplate>
     );
 }
 
 const styles = StyleSheet.create({
     // content container (no flex) so FlatList can scroll when content is smaller
     container: {
-        padding: 16,
-        paddingBottom: 16,
+        paddingHorizontal: 16,
+        paddingTop: 4,
+        paddingBottom: 8,
     },
     // fullHeight used on FlatList to occupy available space
     fullHeight: {
         flex: 1,
+        backgroundColor: '#f8f9ff',
     },
+
+    // Keep essential legacy styles for date picker and modals
     title: {
         fontSize: 24,
         fontWeight: 'bold',
@@ -705,200 +948,96 @@ const styles = StyleSheet.create({
     label: {
         fontSize: 16,
         marginRight: 8,
-    },
-    dateButton: {
-        backgroundColor: '#2196F3',
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        borderRadius: 4,
+        fontWeight: '600',
+        color: '#2d2d2d',
     },
     smallBtn: {
-        backgroundColor: '#2196F3',
-        paddingVertical: 4,
-        paddingHorizontal: 8,
-        borderRadius: 4,
-    },
-    togglesContainer: {
-        flexWrap: 'wrap',
-        marginBottom: 16,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-    },
-    userToggle: {
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        borderRadius: 16,
-        marginRight: 8,
-        marginBottom: 8,
-    },
-    userToggleSelected: {
-        backgroundColor: '#2196F3',
-    },
-    userToggleUnselected: {
-        backgroundColor: '#ddd',
-    },
-    userToggleDisabled: {
-        backgroundColor: '#bbb',
-    },
-    userToggleText: {
-        fontSize: 14,
-    },
-    userToggleTextSelected: {
-        color: 'white',
-    },
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: '600',
-        marginBottom: 8,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-    },
-    assignmentCard: {
-        padding: 16,
-        borderRadius: 8,
-        marginBottom: 16,
-        elevation: 1,
-        justifyContent: "flex-start"
-    },
-    staticTaskCard: {
-        backgroundColor: '#fff',
-        padding: 12,
-        borderRadius: 8,
-        marginBottom: 6,
-        elevation: 1,
-    },
-    datePicker: {
-        width: '100%',
-        borderRadius: 8,
-        overflow: 'hidden',
-        marginBottom: 16,
-    },
-    dateInput: {
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        backgroundColor: '#fafafa',
-        borderTopLeftRadius: 8,
-        borderTopRightRadius: 8,
-    },
-    dateText: {
-        fontSize: 16,
-    },
-    taskRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 8,
-    },
-    taskInput: {
-        flex: 1,
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        backgroundColor: '#fafafa',
-        borderRadius: 4,
-        marginRight: 8,
-    },
-    groupBtn: {
-        backgroundColor: '#673AB7',
+        backgroundColor: '#FF6B9D',
         paddingVertical: 8,
         paddingHorizontal: 16,
-        borderRadius: 4,
-        marginRight: 8,
-    },
-    removeBtn: {
-        backgroundColor: '#F44336',
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        borderRadius: 4,
-    },
-    saveBtn: {
-        backgroundColor: '#4CAF50',
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        borderRadius: 4,
-        alignItems: 'center',
-    },
-    arrowBtn: {
-        padding: 8,
-        borderRadius: 4,
-        marginHorizontal: 8,
-    },
-    dateDisplay: {
-        flex: 1,
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        backgroundColor: '#fafafa',
-        borderRadius: 4,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    dateTextCenter: {
-        fontSize: 16,
-        textAlign: 'center',
+        borderRadius: 12,
+        shadowColor: '#FF6B9D',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
     },
     modalOverlay: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
     },
     modalInner: {
-        width: '80%',
+        width: '85%',
         backgroundColor: 'white',
-        borderRadius: 8,
-        padding: 16,
-        elevation: 4,
+        borderRadius: 24,
+        padding: 24,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 12 },
+        shadowOpacity: 0.3,
+        shadowRadius: 24,
+        elevation: 12,
     },
-    input: {
-        borderWidth: 1,
-        borderColor: '#ddd',
-        padding: 8,
-        borderRadius: 6,
-        backgroundColor: '#fafafa',
-    },
-    /* Calendar styles */
     calendarHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 8,
+        marginBottom: 16,
+        paddingBottom: 12,
+        borderBottomWidth: 2,
+        borderBottomColor: '#f0f0f5',
     },
     monthNavBtn: {
-        padding: 8,
+        padding: 12,
+        borderRadius: 12,
+        backgroundColor: '#f8f9ff',
     },
     monthYearTitle: {
-        fontSize: 16,
-        fontWeight: '600',
+        fontSize: 18,
+        fontWeight: '800',
+        color: '#2d2d2d',
     },
     weekdayRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginBottom: 6,
+        marginBottom: 8,
+        paddingHorizontal: 4,
     },
     weekdayCell: {
-        width: 32,
+        width: 36,
         textAlign: 'center',
-        color: '#666',
+        color: '#a0a0c0',
+        fontWeight: '700',
+        fontSize: 12,
     },
     daysGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
     },
     dayCell: {
-        width: 32,
-        height: 32,
+        width: 36,
+        height: 36,
         margin: 4,
         alignItems: 'center',
         justifyContent: 'center',
-        borderRadius: 4,
+        borderRadius: 12,
     },
     dayText: {
-        color: '#222',
+        color: '#2d2d2d',
+        fontWeight: '600',
     },
     dayCellSelected: {
-        backgroundColor: '#2196F3',
+        backgroundColor: '#FF6B9D',
+        shadowColor: '#FF6B9D',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
     },
     dayTextSelected: {
         color: 'white',
-        fontWeight: '600',
+        fontWeight: '800',
     },
     monthGrid: {
         flexDirection: 'row',
@@ -907,17 +1046,23 @@ const styles = StyleSheet.create({
     },
     monthCell: {
         width: '30%',
-        padding: 8,
+        padding: 12,
         marginVertical: 6,
         alignItems: 'center',
-        borderRadius: 6,
-        backgroundColor: '#fafafa',
+        borderRadius: 12,
+        backgroundColor: '#f8f9ff',
     },
     monthCellSelected: {
-        backgroundColor: '#2196F3',
+        backgroundColor: '#FF6B9D',
+        shadowColor: '#FF6B9D',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
     },
     monthTextSelected: {
         color: 'white',
+        fontWeight: '800',
     },
     yearGrid: {
         flexDirection: 'row',
@@ -926,11 +1071,422 @@ const styles = StyleSheet.create({
     },
     yearCell: {
         width: '30%',
-        padding: 8,
+        padding: 12,
         marginVertical: 6,
         alignItems: 'center',
-        borderRadius: 6,
-        backgroundColor: '#fafafa',
+        borderRadius: 12,
+        backgroundColor: '#f8f9ff',
+    },
+
+    glassHeader: {
+        borderBottomWidth: 0,
+        overflow: 'visible',
+    },
+    stickyHeaderContainer: {
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      paddingBottom: 12,
+    },
+
+    // Date card - Fun gradient design
+    dateCard: {
+        marginBottom: 16,
+        borderRadius: 20,
+        overflow: 'hidden',
+        shadowColor: '#FF6B9D',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.3,
+        shadowRadius: 16,
+        elevation: 8,
+    },
+    dateGradient: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 16,
+        paddingHorizontal: 20,
+    },
+    navIconBtnModern: {
+        padding: 8,
+    },
+    dateDisplayModern: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    dateTextModern: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: '#fff',
+        letterSpacing: 0.5,
+    },
+
+    // Search bar - Playful design
+    searchBarContainerModern: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#fff',
+        borderRadius: 14,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        marginBottom: 12,
+        shadowColor: '#FF6B9D',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.08,
+        shadowRadius: 10,
+        elevation: 2,
+        borderWidth: 2,
+        borderColor: '#ffe0ee',
+    },
+    searchInputModern: {
+        flex: 1,
+        fontSize: 15,
+        color: '#2d2d2d',
+        padding: 0,
+        fontWeight: '600',
+    },
+
+    // Section headers
+    sectionHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+        marginTop: 8,
+    },
+    sectionTitleModern: {
+      fontSize: 18,
+      fontWeight: '800',
+      marginLeft: 8,
+      color: '#2d2d2d',
+    },
+
+    // User chips - Modern vibrant design
+    togglesContainerModern: {
+      flexWrap: 'wrap',
+      marginBottom: 16,
+    },
+    userChipModern: {
+      borderRadius: 20,
+      marginRight: 10,
+      marginBottom: 12,
+      overflow: 'hidden',
+      alignSelf: 'flex-start',
+    },
+    userChipContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        backgroundColor: 'rgba(255,255,255,0.7)',
+        borderRadius: 18,
+        margin: 2,
+        // remove fixed width so it fits content
+    },
+    userChipContentSelected: {
+        backgroundColor: 'transparent',
+    },
+    // Shadows and disabled state for chips
+    userChipSelectedShadow: {
+      shadowColor: '#FF6B9D',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.35,
+      shadowRadius: 16,
+      elevation: 8,
+    },
+    userChipUnselectedShadow: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 6,
+      elevation: 2,
+    },
+    userChipLocked: {
+      opacity: 0.6,
+    },
+    userChipTextModern: {
+      fontSize: 14,
+      color: '#334155',
+      fontWeight: '700',
+    },
+    userChipTextSelected: {
+      color: '#ffffff',
+      textShadowColor: 'rgba(0,0,0,0.25)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 2,
+    },
+    checkBadge: {
+        marginRight: -2,
+    },
+
+    // Progress bars - Vibrant design
+    progressBarOuterModern: {
+        height: 4,
+        backgroundColor: 'rgba(255,255,255,0.4)',
+        borderRadius: 4,
+        overflow: 'hidden',
+        marginTop: 6,
+    },
+    progressBarInnerModern: {
+        height: '100%',
+        borderRadius: 4,
+    },
+
+    // Minutes badge - Fun pill design
+    minutesBadgeModern: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.3)',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+        marginLeft: 8,
+    },
+    minutesBadgeText: {
+        fontSize: 11,
+        fontWeight: '800',
+        color: '#fff',
+        marginLeft: 4,
+    },
+
+    // Summary chips - Gradient design
+    selectedSummaryRowModern: {
+      flexDirection: 'row',
+      marginBottom: 16,
+      gap: 10,
+    },
+    summaryChipModern: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 16,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.15,
+      shadowRadius: 8,
+      elevation: 4,
+    },
+    summaryChipTextModern: {
+      marginLeft: 8,
+      fontSize: 14,
+      fontWeight: '800',
+      color: '#fff',
+    },
+
+    // Assignment cards - Vibrant modern design
+    assignmentOuterModern: {
+      marginBottom: 20,
+    },
+    assignmentGradientModern: {
+      borderRadius: 24,
+      padding: 3,
+      shadowColor: '#FF6B9D',
+      shadowOffset: { width: 0, height: 12 },
+      shadowOpacity: 0.25,
+      shadowRadius: 20,
+      elevation: 10,
+    },
+    assignmentInnerModern: {
+      backgroundColor: '#fff',
+      borderRadius: 21,
+      padding: 20,
+    },
+    assignmentHeaderModern: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    assignmentTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    avatarCircle: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: '#FF6B9D',
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#FF6B9D',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    avatarText: {
+        fontSize: 20,
+        fontWeight: '800',
+        color: '#fff',
+    },
+    assignmentTitleModern: {
+      fontWeight: '800',
+      color: '#2d2d2d',
+      fontSize: 16,
+    },
+    timeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 4,
+    },
+    timeText: {
+        fontSize: 13,
+        color: '#a0a0c0',
+        marginLeft: 4,
+        fontWeight: '600',
+    },
+    assignmentHeaderIconsModern: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    editBtnModern: {
+      borderRadius: 12,
+      overflow: 'hidden',
+      shadowColor: '#FF6B9D',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      elevation: 4,
+    },
+    editBtnGradient: {
+        padding: 10,
+        borderRadius: 12,
+    },
+    expandIconContainer: {
+        padding: 4,
+    },
+    progressBarOuterCard: {
+        height: 8,
+        backgroundColor: '#f0f0f5',
+        borderRadius: 8,
+        overflow: 'hidden',
+        marginTop: 12,
+    },
+    progressBarInnerCard: {
+        height: '100%',
+        borderRadius: 8,
+    },
+
+    // Tasks container
+    tasksContainer: {
+        marginTop: 16,
+    },
+    emptyTasksCard: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 40,
+    },
+    emptyTasksText: {
+        fontSize: 14,
+        color: '#c0c0c0',
+        marginTop: 12,
+        fontWeight: '600',
+    },
+    taskRowFun: {
+      marginBottom: 12,
+    },
+    taskCardFun: {
+      borderRadius: 16,
+      padding: 16,
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      shadowColor: '#4FACFE',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.08,
+      shadowRadius: 12,
+      elevation: 3,
+      borderWidth: 2,
+      borderColor: '#f0f5ff',
+    },
+    taskNumberBadge: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: '#FF6B9D',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+        shadowColor: '#FF6B9D',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 3,
+    },
+    taskNumberText: {
+        fontSize: 14,
+        fontWeight: '800',
+        color: '#fff',
+    },
+    taskTitleFun: {
+      fontWeight: '800',
+      marginBottom: 10,
+      color: '#2d2d2d',
+      fontSize: 15,
+    },
+    taskMetaContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: 8,
+    },
+    taskMetaBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f8faff',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: '#e8f0ff',
+    },
+    taskMetaTextFun: {
+      color: '#6d6d8e',
+      fontSize: 13,
+      fontWeight: '700',
+      marginLeft: 6,
+    },
+    taskDescFun: {
+      color: '#9090b0',
+      fontSize: 13,
+      marginTop: 4,
+      marginBottom: 8,
+      lineHeight: 18,
+    },
+    materialsBlockFun: {
+      marginTop: 12,
+      backgroundColor: '#f8fff8',
+      padding: 12,
+      borderRadius: 12,
+      borderWidth: 2,
+      borderColor: '#e8f8e8',
+    },
+    materialsHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    materialsTitleFun: {
+      fontWeight: '800',
+      fontSize: 13,
+      color: '#2d2d2d',
+      marginLeft: 6,
+    },
+    materialItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 4,
+    },
+    materialDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: '#A8E063',
+        marginRight: 8,
+    },
+    materialLineFun: {
+      fontSize: 13,
+      color: '#6d8e6d',
+      fontWeight: '600',
     },
 });
 

@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { emitLogout } from './auth-events';
 
 const api = axios.create({
-    baseURL: 'http://192.168.33.19:5000/api/v1',
+    baseURL: 'https://alquds-sweets-server.onrender.com/api/v1',
 });
 
 api.interceptors.request.use(async (config) => {

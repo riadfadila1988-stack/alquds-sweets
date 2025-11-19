@@ -69,13 +69,13 @@ export function useAuth() {
         isLoading: false,
         error: null,
       });
-      return true;
+      return {status: true, user};
     } catch (error) {
       setState(prev => ({
         ...prev,
         error: 'Failed to login',
       }));
-      return false;
+      return {status: false, user: null};
     }
   }, []);
 
