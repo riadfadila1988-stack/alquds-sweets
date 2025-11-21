@@ -1,11 +1,10 @@
 import React, {useState} from 'react';
-import {View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput} from 'react-native';
+import {View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert} from 'react-native';
 import MaterialListItem from '@/components/material/material-list-item';
 import MaterialForm from '@/components/material/material-form';
 import {useMaterials} from '@/hooks/use-materials';
 import {useTranslation} from './_i18n';
 import {useAuth} from '@/hooks/use-auth';
-import Header from './components/header';
 import {LinearGradient} from 'expo-linear-gradient';
 import {Ionicons} from '@expo/vector-icons';
 import {ScreenTemplate} from "@/components/ScreenTemplate";

@@ -12,7 +12,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
   useWindowDimensions,
 } from 'react-native';
@@ -20,6 +19,66 @@ import { Feather as Icon } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from '@/app/_i18n';
 import { IMaterial } from '@/types/material';
+
+// Memoized input row component to avoid remounts that can steal focus
+const InputRow = React.memo(
+  ({
+    nameKey,
+    icon,
+    placeholder,
+    value,
+    onChangeText,
+    keyboardType,
+  }: {
+    nameKey: string;
+    icon: React.ComponentProps<typeof Icon>['name'];
+    placeholder: string;
+    value: string;
+    onChangeText: (v: string) => void;
+    keyboardType?: any;
+  }) => {
+    const iconScaleRef = useRef(new Animated.Value(1));
+
+    useEffect(() => {
+      console.log(`[InputRow] mount ${nameKey}`);
+      return () => {
+        console.log(`[InputRow] unmount ${nameKey}`);
+      };
+    }, [nameKey]);
+
+    const handleFocus = () => {
+      Animated.timing(iconScaleRef.current, {
+        toValue: 1.12,
+        duration: 160,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.quad),
+      }).start();
+    };
+    const handleBlur = () => {
+      Animated.timing(iconScaleRef.current, { toValue: 1, duration: 140, useNativeDriver: true }).start();
+    };
+
+    return (
+      <View style={[styles.inputRow, { flexDirection: 'row' /* default; parent handles RTL */ }]}>
+        <Animated.View style={[styles.iconBox, { transform: [{ scale: iconScaleRef.current }] }]}>
+          <Icon name={icon} size={18} color="#fff" />
+        </Animated.View>
+        <TextInput
+          placeholder={placeholder}
+          value={value}
+          onChangeText={(text) => onChangeText(text)}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+          blurOnSubmit={false}
+          style={[styles.input]}
+          keyboardType={keyboardType}
+          placeholderTextColor="#999"
+        />
+      </View>
+    );
+  }
+);
+InputRow.displayName = 'InputRow';
 
 export default function MaterialForm({
   visible,
@@ -36,6 +95,8 @@ export default function MaterialForm({
 }) {
   const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
+
+  // no overlay press handler — rely on ScrollView keyboardShouldPersistTaps='always' so inputs keep focus
 
   // keep prior default for now; ideally derive from i18n or context
   const isRTL = true;
@@ -56,9 +117,6 @@ export default function MaterialForm({
   const slideAnim = useRef(new Animated.Value(20)).current; // subtle translateY
   const rotationAnim = useRef(new Animated.Value(0)).current; // 0..1
   const rotationLoopRef = useRef<Animated.CompositeAnimation | null>(null);
-
-  // per-input icon scale animations map
-  const iconScalesRef = useRef<Record<string, Animated.Value>>({});
 
   // floating bubbles
   const bubbleAnims = useRef(
@@ -211,6 +269,17 @@ export default function MaterialForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
+  // Debug: listen for keyboard hide events to help trace unexpected dismissals
+  useEffect(() => {
+    const onHide = () => {
+      console.log('[MaterialForm] keyboardDidHide');
+    };
+    const sub = Keyboard.addListener ? Keyboard.addListener('keyboardDidHide', onHide) : null;
+    return () => {
+      sub?.remove?.();
+    };
+  }, []);
+
   const handleSubmit = async () => {
     setError(null);
     if (!name.trim()) {
@@ -236,10 +305,18 @@ export default function MaterialForm({
     try {
       if (initialData && (initialData as any)._id && onUpdate) {
         const ok = await onUpdate(String((initialData as any)._id), data);
-        if (!ok) throw new Error('update-failed');
+        if (!ok) {
+          setError(t('failedToCreateMaterial'));
+          setIsSubmitting(false);
+          return;
+        }
       } else {
         const ok = await onCreate(data);
-        if (!ok) throw new Error('create-failed');
+        if (!ok) {
+          setError(t('failedToCreateMaterial'));
+          setIsSubmitting(false);
+          return;
+        }
       }
       reset();
       onClose();
@@ -248,58 +325,6 @@ export default function MaterialForm({
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  // Small helper to render an input with an icon
-  const InputRow = ({
-    nameKey,
-    icon,
-    placeholder,
-    value,
-    onChangeText,
-    keyboardType,
-  }: {
-    nameKey: string;
-    icon: React.ComponentProps<typeof Icon>['name'];
-    placeholder: string;
-    value: string;
-    onChangeText: (v: string) => void;
-    keyboardType?: 'default' | 'numeric' | 'email-address' | 'phone-pad' | 'number-pad' | 'decimal-pad';
-  }) => {
-    if (!iconScalesRef.current[nameKey]) {
-      iconScalesRef.current[nameKey] = new Animated.Value(1);
-    }
-    const iconScale = iconScalesRef.current[nameKey];
-
-    const handleFocus = () => {
-      Animated.timing(iconScale, {
-        toValue: 1.12,
-        duration: 160,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.quad),
-      }).start();
-    };
-    const handleBlur = () => {
-      Animated.timing(iconScale, { toValue: 1, duration: 140, useNativeDriver: true }).start();
-    };
-
-    return (
-      <View style={[styles.inputRow, isRTL ? styles.rowRTL : styles.rowLTR]}>
-        <Animated.View style={[styles.iconBox, { transform: [{ scale: iconScale }] }]}>
-          <Icon name={icon} size={18} color="#fff" />
-        </Animated.View>
-        <TextInput
-          placeholder={placeholder}
-          value={value}
-          onChangeText={onChangeText}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
-          style={[styles.input, isRTL ? styles.rtlText : styles.ltrText]}
-          keyboardType={keyboardType}
-          placeholderTextColor="#999"
-        />
-      </View>
-    );
   };
 
   const rotate = rotationAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
@@ -311,11 +336,15 @@ export default function MaterialForm({
         style={styles.overlay}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 80}
       >
-        <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
-          <View style={{ flex: 1, width: '100%', justifyContent: 'center', alignItems: 'center' }}>
+        {/* Background overlay is a Pressable so taps outside the modal content dismiss the keyboard.
+            The content area uses pointerEvents and ScrollView keyboardShouldPersistTaps='always'
+            so TextInput presses aren't intercepted by the background handler. */}
+        <View style={{ flex: 1, width: '95%' , justifyContent: 'center', alignItems: 'center'}}>
+          <View style={{ flex: 1, width: '100%' }}>
             <ScrollView
               contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 16 }}
-              keyboardShouldPersistTaps="handled"
+              keyboardShouldPersistTaps="always"
+              keyboardDismissMode="none"
             >
               <Animated.View
                 style={[
@@ -387,10 +416,10 @@ export default function MaterialForm({
                   <InputRow nameKey="cost" icon="dollar-sign" placeholder={t('cost')} value={cost} onChangeText={setCost} keyboardType="numeric" />
                 </View>
 
-                <View style={styles.section}>
-                  <Text style={[styles.label, isRTL ? styles.rtlText : styles.ltrText]}>{t('unit') || 'Unit'}</Text>
-                  <InputRow nameKey="unit" icon="tag" placeholder={t('unit') || 'Unit'} value={unit ?? ''} onChangeText={(v: string) => setUnit(v || undefined)} />
-                </View>
+                {/*<View style={styles.section}>*/}
+                {/*  <Text style={[styles.label, isRTL ? styles.rtlText : styles.ltrText]}>{t('unit') || 'Unit'}</Text>*/}
+                {/*  <InputRow nameKey="unit" icon="tag" placeholder={t('unit') || 'Unit'} value={unit ?? ''} onChangeText={(v: string) => setUnit(v || undefined)} />*/}
+                {/*</View>*/}
 
                 {error ? <Text style={[styles.error, isRTL ? styles.rtlText : styles.ltrText]}>{error}</Text> : null}
 
@@ -412,7 +441,7 @@ export default function MaterialForm({
               </Animated.View>
             </ScrollView>
           </View>
-        </TouchableWithoutFeedback>
+        </View>
       </KeyboardAvoidingView>
     </Modal>
   );
