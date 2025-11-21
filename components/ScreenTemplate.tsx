@@ -39,6 +39,8 @@ interface ScreenTemplateProps {
     headerGradient?: readonly [string, string, string];
     fabColor?: string;
     fabIcon?: string;
+    animateFloatingElements?: boolean;
+
 }
 
 interface ScreenTemplateModalProps {
@@ -71,6 +73,7 @@ export function ScreenTemplate({
                                    headerGradient = ['#667eea', '#764ba2', '#f093fb'],
                                    fabColor = '#667eea',
                                    fabIcon = 'plus',
+                                   animateFloatingElements = false,
                                }: ScreenTemplateProps) {
     // Header mount animation
     const headerOpacity = useRef(new Animated.Value(0)).current;
@@ -249,89 +252,93 @@ export function ScreenTemplate({
     return (
         <View style={styles.container}>
             {/* Floating decorative elements - visible across all screens */}
-            <Animated.View
-                style={[
-                    styles.floatingDecor,
-                    styles.decor1,
-                    {
-                        transform: [
-                            { translateY: float1TranslateY },
-                            { scale: scale1 }
-                        ],
-                        opacity: 0.35,
-                    }
-                ]}
-            >
-                <MaterialIcons name="star" size={40} color="#FFD700" />
-            </Animated.View>
+            {animateFloatingElements && (
+                <>
+                    <Animated.View
+                        style={[
+                            styles.floatingDecor,
+                            styles.decor1,
+                            {
+                                transform: [
+                                    {translateY: float1TranslateY},
+                                    {scale: scale1}
+                                ],
+                                opacity: 0.35,
+                            }
+                        ]}
+                    >
+                        <MaterialIcons name="star" size={40} color="#FFD700"/>
+                    </Animated.View>
 
-            <Animated.View
-                style={[
-                    styles.floatingDecor,
-                    styles.decor2,
-                    {
-                        transform: [
-                            { translateY: float2TranslateY },
-                            { rotate: rotate1Deg }
-                        ],
-                        opacity: 0.3,
-                    }
-                ]}
-            >
-                <MaterialIcons name="auto-awesome" size={35} color="#FF6B9D" />
-            </Animated.View>
+                    <Animated.View
+                        style={[
+                            styles.floatingDecor,
+                            styles.decor2,
+                            {
+                                transform: [
+                                    {translateY: float2TranslateY},
+                                    {rotate: rotate1Deg}
+                                ],
+                                opacity: 0.3,
+                            }
+                        ]}
+                    >
+                        <MaterialIcons name="auto-awesome" size={35} color="#FF6B9D"/>
+                    </Animated.View>
 
-            <Animated.View
-                style={[
-                    styles.floatingDecor,
-                    styles.decor3,
-                    {
-                        transform: [
-                            { translateY: float3TranslateY },
-                            { scale: scale2 }
-                        ],
-                        opacity: 0.25,
-                    }
-                ]}
-            >
-                <MaterialIcons name="bubble-chart" size={50} color="#4FACFE" />
-            </Animated.View>
+                    <Animated.View
+                        style={[
+                            styles.floatingDecor,
+                            styles.decor3,
+                            {
+                                transform: [
+                                    {translateY: float3TranslateY},
+                                    {scale: scale2}
+                                ],
+                                opacity: 0.25,
+                            }
+                        ]}
+                    >
+                        <MaterialIcons name="bubble-chart" size={50} color="#4FACFE"/>
+                    </Animated.View>
 
-            <Animated.View
-                style={[
-                    styles.floatingDecor,
-                    styles.decor4,
-                    {
-                        transform: [
-                            { translateY: float1TranslateY },
-                            { rotate: rotate2Deg }
-                        ],
-                        opacity: 0.25,
-                    }
-                ]}
-            >
-                <MaterialIcons name="favorite" size={30} color="#FF6B9D" />
-            </Animated.View>
+                    <Animated.View
+                        style={[
+                            styles.floatingDecor,
+                            styles.decor4,
+                            {
+                                transform: [
+                                    {translateY: float1TranslateY},
+                                    {rotate: rotate2Deg}
+                                ],
+                                opacity: 0.25,
+                            }
+                        ]}
+                    >
+                        <MaterialIcons name="favorite" size={30} color="#FF6B9D"/>
+                    </Animated.View>
 
-            <Animated.View
-                style={[
-                    styles.floatingDecor,
-                    styles.decor5,
-                    {
-                        transform: [
-                            { translateY: float2TranslateY },
-                            { scale: scale1 }
-                        ],
-                        opacity: 0.3,
-                    }
-                ]}
-            >
-                <MaterialIcons name="emoji-events" size={32} color="#FFD700" />
-            </Animated.View>
+                    <Animated.View
+                        style={[
+                            styles.floatingDecor,
+                            styles.decor5,
+                            {
+                                transform: [
+                                    {translateY: float2TranslateY},
+                                    {scale: scale1}
+                                ],
+                                opacity: 0.3,
+                            }
+                        ]}
+                    >
+                        <MaterialIcons name="emoji-events" size={32} color="#FFD700"/>
+                    </Animated.View>
+                </>
+            )}
 
             <Animated.View style={{
                 opacity: headerOpacity,
-                transform: [{ translateY: headerTranslateY }]
+                transform: [{translateY: headerTranslateY}]
             }}>
                 <LinearGradient
                     colors={headerGradient}
@@ -344,7 +351,7 @@ export function ScreenTemplate({
                         style={[
                             styles.shimmerOverlay,
                             {
-                                transform: [{ translateX: shimmerTranslateX }]
+                                transform: [{translateX: shimmerTranslateX}]
                             }
                         ]}
                     >
