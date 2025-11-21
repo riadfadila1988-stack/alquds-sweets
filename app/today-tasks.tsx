@@ -282,18 +282,18 @@ export default function TodayTasksScreen() {
                 Animated.sequence([
                     Animated.timing(partyScale, {
                         toValue: 1.6,
-                        duration: 400,
+                        duration: 200,
                         easing: Easing.inOut(Easing.ease),
                         useNativeDriver: true,
                     }),
                     Animated.timing(partyScale, {
                         toValue: 1.5,
-                        duration: 400,
+                        duration: 200,
                         easing: Easing.inOut(Easing.ease),
                         useNativeDriver: true,
                     }),
                 ]),
-                { iterations: 5 }
+                { iterations: 0 }
             ),
         ]);
 
@@ -301,8 +301,8 @@ export default function TodayTasksScreen() {
         const confettiAnimations = partyConfettiAnims.current.map((anim, i) => {
             return Animated.timing(anim, {
                 toValue: 1,
-                duration: 2000 + Math.random() * 1500,
-                delay: Math.random() * 300,
+                duration: 100 ,
+                delay: 300,
                 easing: Easing.out(Easing.quad),
                 useNativeDriver: true,
             });
@@ -312,8 +312,8 @@ export default function TodayTasksScreen() {
         const starsAnimations = partyStarsAnims.current.map((anim, i) => {
             return Animated.timing(anim, {
                 toValue: 1,
-                duration: 1800 + Math.random() * 1000,
-                delay: Math.random() * 400,
+                duration: 1800,
+                delay: 400,
                 easing: Easing.out(Easing.cubic),
                 useNativeDriver: true,
             });
@@ -330,12 +330,12 @@ export default function TodayTasksScreen() {
         setTimeout(() => {
             Animated.timing(partyOpacity, {
                 toValue: 0,
-                duration: 1000,
+                duration: 200,
                 useNativeDriver: true,
             }).start(() => {
                 setShowParty(false);
             });
-        }, 5000);
+        }, 1000);
     }, [partyScale, partyOpacity]);
 
     // Load whether the current user has an open attendance session for today.

@@ -12,6 +12,7 @@ import {useThemeColor} from '@/hooks/use-theme-color';
 import Timer from './components/timer';
 import {IconSymbol} from '@/components/ui/icon-symbol';
 import {LinearGradient} from 'expo-linear-gradient';
+import {MaterialIcons} from "@expo/vector-icons";
 
 function formatDurationMinutes(minutes: number | undefined) {
     if (minutes == null || isNaN(minutes)) return '--';
@@ -318,6 +319,38 @@ export default function WorkStatusScreen() {
         return emojis[Math.floor(Math.random() * emojis.length)];
     }
 
+    const formatStartAt = (v: any) => {
+        if (!v && v !== 0) return null;
+        try {
+            if (v instanceof Date) {
+                const hh = String(v.getHours()).padStart(2, '0');
+                const mm = String(v.getMinutes()).padStart(2, '0');
+                return `${hh}:${mm}`;
+            }
+            if (typeof v === 'number' && Number.isFinite(v)) {
+                const d = new Date(v);
+                const hh = String(d.getHours()).padStart(2, '0');
+                const mm = String(d.getMinutes()).padStart(2, '0');
+                return `${hh}:${mm}`;
+            }
+            if (typeof v === 'string') {
+                if (v.includes('T')) {
+                    const d = new Date(v);
+                    if (!isNaN(d.getTime())) {
+                        const hh = String(d.getHours()).padStart(2, '0');
+                        const mm = String(d.getMinutes()).padStart(2, '0');
+                        return `${hh}:${mm}`;
+                    }
+                }
+                const m = /^\s*(\d{1,2}):(\d{2})\s*$/.exec(v);
+                if (m) return `${m[1].padStart(2, '0')}:${m[2]}`;
+                return v;
+            }
+        } catch {
+        }
+        return null;
+    };
+
     const loadAttendance = useCallback(async () => {
         try {
             setAttendanceLoading(true);
@@ -549,6 +582,13 @@ export default function WorkStatusScreen() {
                                                             <Sparkle size={16}/>
                                                             <Text
                                                                 style={[styles.taskNameSmall, rtlText, {marginHorizontal: 4}]}>{e.task?.name || 'Task'}</Text>
+                                                            {(e.task.startAtString ?? e.task.startAt) ? (
+                                                                <View style={styles.startAtChip}>
+                                                                    <MaterialIcons name="access-time" size={14} color="#424242" />
+                                                                    <Text style={styles.startAtTextSmall}>{formatStartAt(e.task.startAtString ?? e.task.startAt)}</Text>
+                                                                </View>
+                                                            ) : null}
+
                                                         </View>
                                                     ) : null}
                                                 </View>
@@ -570,7 +610,6 @@ export default function WorkStatusScreen() {
                                                             <Text
                                                                 style={[styles.value, {color: textColor}, rtlText]}>{formatDurationMinutes(e.assignedDuration)}</Text>
                                                         </View>
-
                                                         <View style={[styles.row, {
                                                             flexDirection: isRTL ? 'row-reverse' : 'row',
                                                             alignItems: 'center'
@@ -716,7 +755,8 @@ export default function WorkStatusScreen() {
                                                                                 <View style={{
                                                                                     flexDirection: isRTL ? 'row-reverse' : 'row',
                                                                                     alignItems: 'center',
-                                                                                    marginTop: 6
+                                                                                    marginTop: 6,
+                                                                                    gap: 5
                                                                                 }}>
                                                                                     <IconSymbol name="clock.fill"
                                                                                                 size={14}
@@ -728,6 +768,12 @@ export default function WorkStatusScreen() {
                                                                                     }, rtlText]}>
                                                                                         {typeof actualDurationMinutes === 'number' ? formatDurationMinutes(actualDurationMinutes) : '00:00'}
                                                                                     </Text>
+                                                                                    {(task.startAtString ?? task.startAt) ? (
+                                                                                        <View style={styles.startAtChip}>
+                                                                                            <MaterialIcons name="access-time" size={14} color="#424242" />
+                                                                                            <Text style={styles.startAtTextSmall}>{formatStartAt(task.startAtString ?? task.startAt)}</Text>
+                                                                                        </View>
+                                                                                    ) : null}
                                                                                 </View>
                                                                             )}
 
@@ -738,6 +784,7 @@ export default function WorkStatusScreen() {
                                                                                 }, rtlText]}>
                                                                                     💬 {task.description}
                                                                                 </Text>
+
                                                                             ) : null}
                                                                         </LinearGradient>
                                                                     </AnimatedCard>
@@ -840,4 +887,6 @@ const styles = StyleSheet.create({
         textShadowOffset: {width: 0, height: 1},
         textShadowRadius: 2,
     },
+    startAtChip: {flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.4)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10},
+    startAtTextSmall: {marginLeft: 6, color: '#424242', fontSize: 12, fontWeight: '600'},
 });
