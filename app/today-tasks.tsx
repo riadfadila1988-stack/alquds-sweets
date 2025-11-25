@@ -20,7 +20,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 
 import {useAuth} from '@/hooks/use-auth';
-import {useWorkDayPlan} from '@/hooks/use-work-day-plan';
+import {useUserWorkDayPlan} from '@/hooks/use-user-work-day-plan';
 import {useThemeColor} from '@/hooks/use-theme-color';
 import Timer from './components/timer';
 import {createNotification} from '@/services/notification';
@@ -57,31 +57,26 @@ export default function TodayTasksScreen() {
     const effectiveUserId = (user ? String((user as any)._id || user) : lastUserIdRef.current) || null;
 
     const isoDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
-    const {plan, isLoading: planLoading, error, save} = useWorkDayPlan(isoDate);
+    const {assignment, tasks: remoteTasks, isLoading: planLoading, error, updateTask} = useUserWorkDayPlan(effectiveUserId, isoDate);
 
-    // loading will include attendanceLoading and is defined after attendance state is declared
-    const [localAssignments, setLocalAssignments] = useState<any[]>(() => plan?.assignments ? [...plan.assignments] : []);
+    // Keep local state for optimistic updates
+    const [localAssignment, setLocalAssignment] = useState<any>(null);
+    const [localTasks, setLocalTasks] = useState<any[]>([]);
 
     useEffect(() => {
-        // sync local when plan changes — do not clear to [] during loading
-        if (Array.isArray(plan?.assignments) && plan.assignments.length > 0) {
-            setLocalAssignments(JSON.parse(JSON.stringify(plan.assignments)));
+        // sync local when assignment changes
+        if (assignment) {
+            setLocalAssignment(JSON.parse(JSON.stringify(assignment)));
+            setLocalTasks(JSON.parse(JSON.stringify(assignment.tasks || [])));
         }
-    }, [plan]);
+    }, [assignment]);
 
+    // Use local tasks if available, otherwise remote tasks
+    const tasks: any[] = useMemo(() => localTasks.length > 0 ? localTasks : remoteTasks, [localTasks, remoteTasks]);
+    const myAssignment = localAssignment || assignment;
 
-    // theme hooks and UI state must be called unconditionally (before early returns)
-    const successBg = useThemeColor({}, 'success');
-    const warningBg = useThemeColor({}, 'warning');
-    const dangerBg = useThemeColor({}, 'danger');
+    // theme color for action buttons
     const tint = useThemeColor({}, 'tint');
-    const textColor = useThemeColor({}, 'text');
-
-    // Memoize assignments and tasks so hooks depending on them are stable
-    const assignments = useMemo(() => localAssignments || [], [localAssignments]);
-    const assignmentIndex = useMemo(() => assignments.findIndex((a: any) => String(a.user?._id || a.user) === String(effectiveUserId)), [assignments, effectiveUserId]);
-    const myAssignment = assignmentIndex >= 0 ? assignments[assignmentIndex] : null;
-    const tasks: any[] = useMemo(() => myAssignment?.tasks || [], [myAssignment]);
 
     // Show/hide completed tasks (default hide completed) — declared before filteredTasks
     const [showDoneTasks, setShowDoneTasks] = useState(false);
@@ -549,43 +544,6 @@ export default function TodayTasksScreen() {
         return null;
     };
 
-    // helper to sanitize assignments for save: ensure user is id, not populated object
-    const sanitizeAssignmentsForSave = (assigns: any[]) => {
-        return assigns.map(a => ({
-            user: a.user?._id || a.user,
-            tasks: (a.tasks || []).map((t: any) => ({...t})),
-        }));
-    };
-
-    const persistAssignments = async (updatedAssignments: any[]) => {
-        try {
-            // Animate layout changes
-            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-            setLocalAssignments(updatedAssignments.map((a: any) => ({...a})));
-            await save({date: isoDate, assignments: sanitizeAssignmentsForSave(updatedAssignments)});
-        } catch (e: any) {
-            Alert.alert(t('failedToSaveTaskTimes'), String(e?.message || e));
-        }
-    };
-
-    const endActiveTaskIfAny = (assigns: any[]) => {
-        // Only end active tasks for the current user
-        const userIdStr = String(effectiveUserId || '');
-        const now = new Date();
-        return assigns.map((a: any) => {
-            if (String(a.user?._id || a.user) !== userIdStr) return a;
-            return {
-                ...a,
-                tasks: (a.tasks || []).map((t: any) => {
-                    if (t.startTime && !t.endTime) {
-                        return {...t, endTime: now};
-                    }
-                    return t;
-                }),
-            };
-        });
-    };
-
     const handleStart = async (taskIndex: number) => {
         if (!myAssignment) return;
         // Prevent starting a task when the user is not clocked in.
@@ -612,44 +570,66 @@ export default function TodayTasksScreen() {
             return;
         }
         const now = new Date();
-        let updated = JSON.parse(JSON.stringify(assignments));
 
-        // If there is another active task, end it first
-        updated = endActiveTaskIfAny(updated);
+        try {
+            // First, end any active task for this user
+            const activeTaskIndex = tasks.findIndex((t: any) => t.startTime && !t.endTime);
+            if (activeTaskIndex !== -1 && activeTaskIndex !== taskIndex) {
+                await updateTask({
+                    date: isoDate,
+                    userId: String(effectiveUserId),
+                    taskIndex: activeTaskIndex,
+                    updates: { endTime: now }
+                });
+            }
 
-        // set startTime for the selected task and clear endTime
-        updated = updated.map((a: any, ai: number) => {
-            if (ai !== assignmentIndex) return a;
-            const tasksCopy = (a.tasks || []).map((t: any, ti: number) => {
-                if (ti === taskIndex) {
-                    return {...t, startTime: now, endTime: t.endTime ? t.endTime : null};
+            // Now start the selected task
+            const task = tasks[taskIndex];
+            await updateTask({
+                date: isoDate,
+                userId: String(effectiveUserId),
+                taskId: task._id,
+                taskIndex: taskIndex,
+                updates: {
+                    startTime: now,
+                    endTime: undefined  // Clear endTime if it was previously set
                 }
-                return t;
             });
-            return {...a, tasks: tasksCopy};
-        });
 
-        // update local state + persist
-        const p = persistAssignments(updated);
-        await p;
+            // Update local state optimistically
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            setLocalTasks(prev => {
+                return prev.map((t: any, ti: number) => {
+                    if (ti === activeTaskIndex && activeTaskIndex !== taskIndex) {
+                        return {...t, endTime: now};
+                    }
+                    if (ti === taskIndex) {
+                        return {...t, startTime: now, endTime: undefined};
+                    }
+                    return t;
+                });
+            });
 
-        // 🚀 LAUNCH THE ROCKET! 🚀
-        try {
-            launchRocket();
-        } catch {
-            // ignore animation errors
-        }
+            // 🚀 LAUNCH THE ROCKET! 🚀
+            try {
+                launchRocket();
+            } catch {
+                // ignore animation errors
+            }
 
-        // Play a small highlight animation on the started card to celebrate
-        try {
-            const anim = getHighlightAnim(taskIndex);
-            anim.setValue(0);
-            Animated.sequence([
-                Animated.timing(anim, {toValue: 1, duration: 220, useNativeDriver: true}),
-                Animated.timing(anim, {toValue: 0, duration: 420, useNativeDriver: true}),
-            ]).start();
-        } catch {
-            // ignore animation errors
+            // Play a small highlight animation on the started card to celebrate
+            try {
+                const anim = getHighlightAnim(taskIndex);
+                anim.setValue(0);
+                Animated.sequence([
+                    Animated.timing(anim, {toValue: 1, duration: 220, useNativeDriver: true}),
+                    Animated.timing(anim, {toValue: 0, duration: 420, useNativeDriver: true}),
+                ]).start();
+            } catch {
+                // ignore animation errors
+            }
+        } catch (e: any) {
+            Alert.alert(t('failedToSaveTaskTimes'), String(e?.message || e));
         }
     };
 
@@ -681,84 +661,96 @@ export default function TodayTasksScreen() {
             }
         }
 
-        const updated = assignments.map((a: any, ai: number) => {
-            if (ai !== assignmentIndex) return a;
-            const tasksCopy = (a.tasks || []).map((t: any, ti: number) => {
-                if (ti === taskIndex) {
-                    return {...t, endTime: now};
-                }
-                return t;
+        try {
+            const task = tasks[taskIndex];
+            await updateTask({
+                date: isoDate,
+                userId: String(effectiveUserId),
+                taskId: task._id,
+                taskIndex: taskIndex,
+                updates: { endTime: now }
             });
-            return {...a, tasks: tasksCopy};
-        });
 
-        await persistAssignments(updated);
+            // Update local state optimistically
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            setLocalTasks(prev => {
+                return prev.map((t: any, ti: number) => {
+                    if (ti === taskIndex) {
+                        return {...t, endTime: now};
+                    }
+                    return t;
+                });
+            });
+        } catch (e: any) {
+            Alert.alert(t('failedToSaveTaskTimes'), String(e?.message || e));
+        }
     };
 
     const saveOverrunAndClose = async () => {
         if (!overrunPending) return;
         const {taskIndex, endTime} = overrunPending;
 
-        // attach endTime and overrunReason to the specific task
-        const updated = assignments.map((a: any, ai: number) => {
-            if (ai !== assignmentIndex) return a;
-            const tasksCopy = (a.tasks || []).map((t: any, ti: number) => {
-                if (ti === taskIndex) {
-                    return {...t, endTime, overrunReason: overrunReason.trim() || undefined};
-                }
-                return t;
-            });
-            return {...a, tasks: tasksCopy};
-        });
-
         setOverrunModalVisible(false);
         setOverrunPending(null);
 
-        await persistAssignments(updated);
-
-        // Send a notification for the overrun to admins: include employee name, task name, overtime and reason
         try {
-            const ass = (updated && updated[assignmentIndex]) || assignments[assignmentIndex] || null;
-            const empName = ass?.user?.name || String(ass?.user || 'Unknown employee');
-            const t = ass?.tasks?.[taskIndex] || null;
-            const taskName = t?.name || 'Untitled Task';
-            const plannedMin = typeof t?.duration === 'number' ? t.duration : 0;
-            const actualMin = t?.endTime && t?.startTime ? Math.round((new Date(t.endTime).getTime() - new Date(t.startTime).getTime()) / 60000) : null;
-            const overtimeMin = actualMin !== null ? Math.max(0, Math.round(actualMin - plannedMin)) : null;
-            const reasonText = overrunReason?.trim() || 'No reason provided';
+            const task = tasks[taskIndex];
+            await updateTask({
+                date: isoDate,
+                userId: String(effectiveUserId),
+                taskId: task._id,
+                taskIndex: taskIndex,
+                updates: {
+                    endTime,
+                    overrunReason: overrunReason.trim() || undefined
+                }
+            });
 
-            // Build Arabic overtime text
-            let overtimeTextAr: string;
-            if (overtimeMin === null) {
-                overtimeTextAr = 'بعض الوقت الإضافي';
-            } else if (overtimeMin === 1) {
-                overtimeTextAr = 'دقيقة واحدة';
-            } else {
-                overtimeTextAr = `${overtimeMin} دقيقة`;
-            }
+            // Update local state optimistically
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            setLocalTasks(prev => {
+                return prev.map((t: any, ti: number) => {
+                    if (ti === taskIndex) {
+                        return {...t, endTime, overrunReason: overrunReason.trim() || undefined};
+                    }
+                    return t;
+                });
+            });
 
-            // debug removed
-            const messageAr = `${empName} — "${taskName}" استغرق ${overtimeTextAr} أكثر. السبب: ${reasonText}`;
-            await createNotification(messageAr);
-            // In development, notify the user that the notification was sent (helps debug missing server-side creation)
+            // Send a notification for the overrun to admins: include employee name, task name, overtime and reason
             try {
+                const empName = myAssignment?.user?.name || String(myAssignment?.user || 'Unknown employee');
+                const taskName = task?.name || 'Untitled Task';
+                const plannedMin = typeof task?.duration === 'number' ? task.duration : 0;
+                const actualMin = endTime && task?.startTime ? Math.round((new Date(endTime).getTime() - new Date(task.startTime).getTime()) / 60000) : null;
+                const overtimeMin = actualMin !== null ? Math.max(0, Math.round(actualMin - plannedMin)) : null;
+                const reasonText = overrunReason?.trim() || 'No reason provided';
+
+                // Build Arabic overtime text
+                let overtimeTextAr: string;
+                if (overtimeMin === null) {
+                    overtimeTextAr = 'بعض الوقت الإضافي';
+                } else if (overtimeMin === 1) {
+                    overtimeTextAr = 'دقيقة واحدة';
+                } else {
+                    overtimeTextAr = `${overtimeMin} دقيقة`;
+                }
+
+                const messageAr = `${empName} — "${taskName}" استغرق ${overtimeTextAr} أكثر. السبب: ${reasonText}`;
+                await createNotification(messageAr);
+
                 if (typeof __DEV__ !== 'undefined' && __DEV__) {
                     Alert.alert(t('notifications'), t('notificationSent'));
                 }
-            } catch {
-            }
-            // debug removed
-        } catch (e: any) {
-            // Surface failure to the user in dev so it's obvious why admins wouldn't see it
-            try {
+            } catch (e: any) {
                 if (typeof __DEV__ !== 'undefined' && __DEV__) {
                     Alert.alert(t('notificationFailed'), String(e?.message || e));
                 }
-            } catch {
+            } finally {
+                setOverrunReason('');
             }
-            // debug removed
-        } finally {
-            // clear the reason input in the UI
+        } catch (e: any) {
+            Alert.alert(t('failedToSaveTaskTimes'), String(e?.message || e));
             setOverrunReason('');
         }
     };

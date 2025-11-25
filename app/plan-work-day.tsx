@@ -1,4 +1,3 @@
-/* eslint-disable import/no-unused-modules */
 import React, {useMemo, useState, useRef, useEffect} from 'react';
 import {View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, Platform, Alert, KeyboardAvoidingView, Keyboard, Animated, TextInput}from 'react-native';
 import { BlurView } from 'expo-blur';
@@ -854,6 +853,7 @@ export default function PlanWorkDayScreen() {
         <ScreenTemplate
             title={t('planWorkDay') || 'Plan Work Day'}
             showBackButton={true}
+            onBackPress={() => router.push('/admin')}
             headerGradient={[headerGrad1, headerGrad2, headerGrad3] as any}
         >
             <KeyboardAvoidingView

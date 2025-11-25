@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getWorkDayPlanByDate, createOrUpdateWorkDayPlan } from '@/services/work-day-plan';
+import { getWorkDayPlanByDate, createOrUpdateWorkDayPlan, updateUserTask } from '@/services/work-day-plan';
 
 const formatDateLocal = (d: Date) => {
   const y = d.getFullYear();
@@ -21,7 +21,24 @@ export function useWorkDayPlan(date?: string) {
 
   const saveMutation = useMutation({
     mutationFn: createOrUpdateWorkDayPlan,
-    onSuccess: () => {
+    onSuccess: (updatedPlan) => {
+      // Directly update the cache with the returned plan to avoid race conditions
+      // where a refetch might return stale data if the server is slow to index/update.
+      if (updatedPlan) {
+        queryClient.setQueryData(['workDayPlan', effectiveDate], updatedPlan);
+      }
+      // Still invalidate to ensure consistency eventually, but the immediate UI update is handled above
+      queryClient.invalidateQueries({ queryKey: ['workDayPlan'] });
+      queryClient.invalidateQueries({ queryKey: ['workDayPlans'] });
+    },
+  });
+
+  const updateTaskMutation = useMutation({
+    mutationFn: updateUserTask,
+    onSuccess: (updatedPlan) => {
+      if (updatedPlan) {
+        queryClient.setQueryData(['workDayPlan', effectiveDate], updatedPlan);
+      }
       queryClient.invalidateQueries({ queryKey: ['workDayPlan'] });
       queryClient.invalidateQueries({ queryKey: ['workDayPlans'] });
     },
@@ -32,6 +49,7 @@ export function useWorkDayPlan(date?: string) {
     isLoading,
     error: error?.message,
     save: saveMutation.mutateAsync,
+    updateTask: updateTaskMutation.mutateAsync,
     refetch, // expose refetch so callers can trigger a manual refresh (used by work-status interval)
   };
 }
