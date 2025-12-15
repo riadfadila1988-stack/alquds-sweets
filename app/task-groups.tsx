@@ -1,5 +1,6 @@
+
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, RefreshControl, Animated, Dimensions, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, RefreshControl, Animated, Dimensions, ScrollView, Modal, TextInput, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { useTaskGroups } from '@/hooks/use-task-groups';
 import { useTranslation } from './_i18n';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -26,7 +27,7 @@ function hashCode(str: string) {
 
 export default function TaskGroupsScreen() {
   const { t } = useTranslation();
-  const { taskGroups, isLoading, error, remove } = useTaskGroups();
+  const { taskGroups, isLoading, error, remove, create } = useTaskGroups();
   const router = useRouter();
   const params = useLocalSearchParams();
   const headerColor1 = (params.headerColor1 as string) || '#fa709a';
@@ -34,6 +35,12 @@ export default function TaskGroupsScreen() {
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
+
+  const [isDuplicating, setIsDuplicating] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [duplicateName, setDuplicateName] = useState('');
+  const [selectedGroup, setSelectedGroup] = useState<any>(null);
+
 
   // Dimensions (static for now; could add orientation listener for dynamic updates)
   const screenWidth = Dimensions.get('window').width;
@@ -67,13 +74,37 @@ export default function TaskGroupsScreen() {
   const confirmDelete = (id: string, name?: string) => {
     Alert.alert(
       t('delete') || 'Delete',
-      (t('deleteConfirm') || 'Are you sure you want to delete this item?') + (name ? `\n${name}` : ''),
+      (t('deleteConfirm') || 'Are you sure you want to delete this item?') + (name ? `\n${name} ` : ''),
       [
         { text: t('cancel') || 'Cancel', style: 'cancel' },
         { text: t('delete') || 'Delete', style: 'destructive', onPress: async () => { await remove(id); } },
       ]
     );
   };
+
+  const openDuplicateModal = (tg: any) => {
+    setSelectedGroup(tg);
+    setDuplicateName(`${tg.name} (${t('copy') || 'Copy'})`);
+    setModalVisible(true);
+  };
+
+  const handleConfirmDuplicate = async () => {
+    if (!selectedGroup) return;
+    if (isDuplicating) return;
+
+    setIsDuplicating(true);
+    try {
+      const { _id, __v, createdAt, updatedAt, ...rest } = selectedGroup;
+      await create({ ...rest, name: duplicateName });
+      setModalVisible(false);
+      setSelectedGroup(null);
+    } catch (e: any) {
+      Alert.alert(t('error') || 'Error', e.message || 'Failed to duplicate');
+    } finally {
+      setIsDuplicating(false);
+    }
+  };
+
 
   // Shuffle for random ordering (deterministic-ish but visually varied)
   const shuffledTaskGroups = useMemo(() => {
@@ -192,9 +223,14 @@ export default function TaskGroupsScreen() {
                       <Text style={styles.scatterTitle} numberOfLines={3}>{tg.name}</Text>
                       <View style={styles.scatterFooterRow}>
                         <Text style={styles.scatterMeta}>{t('open') || 'Open'}</Text>
-                        <TouchableOpacity onPress={() => confirmDelete(tg._id, tg.name)} style={styles.scatterDeleteBtn}>
-                          <MaterialIcons name="delete" size={16} color="#fff" />
-                        </TouchableOpacity>
+                        <View style={{ flexDirection: 'row', gap: 6 }}>
+                          <TouchableOpacity onPress={() => openDuplicateModal(tg)} style={styles.scatterDeleteBtn}>
+                            <MaterialIcons name="content-copy" size={16} color="#fff" />
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={() => confirmDelete(tg._id, tg.name)} style={styles.scatterDeleteBtn}>
+                            <MaterialIcons name="delete" size={16} color="#fff" />
+                          </TouchableOpacity>
+                        </View>
                       </View>
                     </View>
                   </LinearGradient>
@@ -204,6 +240,53 @@ export default function TaskGroupsScreen() {
           </ScrollView>
         )}
       </View>
+
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setModalVisible(false)}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+              <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={styles.modalKeyboardAvoiding}
+              >
+                <TouchableWithoutFeedback>
+                  <View style={styles.modalContent}>
+                    <Text style={styles.modalTitle}>{t('duplicateGroup') || 'Duplicate Group'}</Text>
+                    <Text style={styles.modalSubtitle}>{t('enterNewName') || 'Enter a name for the duplicated group:'}</Text>
+
+                    <TextInput
+                      style={styles.input}
+                      value={duplicateName}
+                      onChangeText={setDuplicateName}
+                      placeholder={t('groupName') || 'Group Name'}
+                      autoFocus
+                    />
+
+                    <View style={styles.modalButtons}>
+                      <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setModalVisible(false)}>
+                        <Text style={styles.cancelBtnText}>{t('cancel') || 'Cancel'}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.modalBtn, styles.confirmBtn, isDuplicating && { opacity: 0.7 }]}
+                        onPress={handleConfirmDuplicate}
+                        disabled={isDuplicating || !duplicateName.trim()}
+                      >
+                        <Text style={styles.confirmBtnText}>{isDuplicating ? (t('duplicating') || 'Duplicating...') : (t('duplicate') || 'Duplicate')}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </TouchableWithoutFeedback>
+              </KeyboardAvoidingView>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
     </ScreenTemplate>
   );
 }
@@ -234,4 +317,80 @@ const styles = StyleSheet.create({
   scatterFooterRow: { position: 'absolute', left: 12, right: 12, bottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   scatterMeta: { fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.85)' },
   scatterDeleteBtn: { backgroundColor: 'rgba(0,0,0,0.25)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16 },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalKeyboardAvoiding: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  modalContent: {
+    width: '85%',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  input: {
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#334155',
+    marginBottom: 24,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelBtn: {
+    backgroundColor: '#f1f5f9',
+  },
+  confirmBtn: {
+    backgroundColor: '#6366f1',
+  },
+  cancelBtnText: {
+    color: '#64748b',
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  confirmBtnText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 15,
+  },
 });
+

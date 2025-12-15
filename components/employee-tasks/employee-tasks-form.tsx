@@ -17,9 +17,11 @@ interface EmployeeTasksFormProps {
   taskGroups?: any[];
   // Optional ISO date (YYYY-MM-DD) to display on the screen
   date?: string;
+  otherEmployees?: { id: string; name: string }[];
+  onMoveTask?: (task: any, targetUserId: string) => void;
 }
 
-export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose, isSaving = false, employeeName, taskGroups = [], date }: EmployeeTasksFormProps) {
+export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose, isSaving = false, employeeName, taskGroups = [], date, otherEmployees = [], onMoveTask }: EmployeeTasksFormProps) {
   const { t } = useTranslation();
   const isRTL = true;
   const nextIdRef = useRef<number>(0);
@@ -42,6 +44,8 @@ export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose
   // ensure tasks have stable keys for DraggableFlatList
   const [tasks, setTasks] = useState<any[]>(() => (initialTasks || []).map((it: any) => ({ ...it, _key: it._key ?? it._id ?? makeKey() })));
   const [showGroupsModal, setShowGroupsModal] = useState(false);
+  const [showMoveModal, setShowMoveModal] = useState(false);
+  const [taskToMove, setTaskToMove] = useState<any | null>(null);
 
   // Store latest task data in ref to avoid re-renders on field changes (preserves keyboard focus)
   const tasksDataRef = useRef<any[]>(tasks);
@@ -226,28 +230,41 @@ export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose
           accessibilityLabel={t('dragToReorder') || 'Drag to reorder'}
         >
           <MaterialIcons name="drag-indicator" size={24} color="#999" />
+          {/* Move Task Button - under drag icon */}
+          {onMoveTask && otherEmployees && otherEmployees.length > 0 && (
+            <TouchableOpacity
+              style={{ marginTop: 12 }}
+              onPress={() => {
+                setTaskToMove(task);
+                setShowMoveModal(true);
+              }}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <MaterialIcons name="person-add-alt-1" size={20} color="#4FACFE" />
+            </TouchableOpacity>
+          )}
         </TouchableOpacity>
         <View style={styles.taskContent}>
           <Task
             task={task}
             // Pass only the updated task object; parent will find it by key
             onChange={(newTask) => handleTaskChange(newTask)}
-             // Use key-based removal to ensure the correct task is removed
-             onRemove={() => removeTaskByKey(task._key)}
-             index={taskIndex}
-             // Attach a ref so we can call `flush()` on submit to capture any local edits that
-             // haven't been flushed via onBlur yet (name/description/duration).
-             ref={(r: any) => {
-               try {
-                 const key = task?._key ?? task?._id;
-                 if (!key) return;
-                 if (r) taskRowRefs.current[key] = r;
-                 else delete taskRowRefs.current[key];
-               } catch (e) {
-                 // ignore
-               }
-             }}
-           />
+            // Use key-based removal to ensure the correct task is removed
+            onRemove={() => removeTaskByKey(task._key)}
+            index={taskIndex}
+            // Attach a ref so we can call `flush()` on submit to capture any local edits that
+            // haven't been flushed via onBlur yet (name/description/duration).
+            ref={(r: any) => {
+              try {
+                const key = task?._key ?? task?._id;
+                if (!key) return;
+                if (r) taskRowRefs.current[key] = r;
+                else delete taskRowRefs.current[key];
+              } catch (e) {
+                // ignore
+              }
+            }}
+          />
         </View>
       </View>
     );
@@ -295,6 +312,63 @@ export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose
             <TouchableOpacity
               style={styles.modalCancelBtn}
               onPress={() => setShowGroupsModal(false)}
+              activeOpacity={0.8}
+            >
+              <MaterialIcons name="close" size={18} color="#FF6B9D" />
+              <Text style={styles.modalCancelText}>{t('cancel') || 'Cancel'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  const renderMoveTaskModal = () => (
+    <Modal visible={showMoveModal} transparent animationType="slide" onRequestClose={() => setShowMoveModal(false)}>
+      <View style={styles.modalOverlay}>
+        <View style={[styles.modalInner, { maxHeight: '60%' }]}>
+          <View style={styles.modalHeader}>
+            <MaterialIcons name="person-add" size={24} color="#4FACFE" />
+            <Text style={styles.modalTitle}>{t('moveTaskTo') || 'Move Task To...'}</Text>
+          </View>
+          <Text style={{ marginBottom: 12, color: '#666' }}>
+            {t('moveTaskConfirmation') || 'Select an employee to assign this task to:'}
+          </Text>
+          <FlatList
+            data={otherEmployees}
+            keyExtractor={(e) => e.id}
+            renderItem={({ item: emp }) => (
+              <TouchableOpacity
+                style={styles.groupBtnContainer}
+                onPress={() => {
+                  if (taskToMove && onMoveTask) {
+                    onMoveTask(taskToMove, emp.id);
+                    setShowMoveModal(false);
+                    setTaskToMove(null);
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={['#4FACFE', '#00F2FE']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.groupBtn}
+                >
+                  <MaterialIcons name="person" size={20} color="#fff" />
+                  <Text style={styles.groupBtnText}>{emp.name}</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
+            showsVerticalScrollIndicator={true}
+          />
+          <View style={styles.modalFooter}>
+            <TouchableOpacity
+              style={styles.modalCancelBtn}
+              onPress={() => {
+                setShowMoveModal(false);
+                setTaskToMove(null);
+              }}
               activeOpacity={0.8}
             >
               <MaterialIcons name="close" size={18} color="#FF6B9D" />
@@ -418,13 +492,13 @@ export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose
         </View>
 
         <DraggableFlatList
-           ref={listRef}
-           data={visibleTasks}
-           extraData={tasks}
-           onDragBegin={(_index: number) => { Keyboard.dismiss(); }}
-           onDragEnd={(params: any) => { handleDragEnd(params); }}
-           onRelease={(_index: number) => { Keyboard.dismiss(); }}
-           onScroll={() => { /* optional debug placeholder */ }}
+          ref={listRef}
+          data={visibleTasks}
+          extraData={tasks}
+          onDragBegin={(_index: number) => { Keyboard.dismiss(); }}
+          onDragEnd={(params: any) => { handleDragEnd(params); }}
+          onRelease={(_index: number) => { Keyboard.dismiss(); }}
+          onScroll={() => { /* optional debug placeholder */ }}
           keyExtractor={(item: any) => item._key}
           ListFooterComponent={renderListFooter}
           contentContainerStyle={styles.scrollContainer}
@@ -435,10 +509,11 @@ export default function EmployeeTasksForm({ initialTasks = [], onSubmit, onClose
           renderItem={({ item: task, index: taskIndex, drag, isActive }: RenderItemParams<any>) => (
             // Provide a stable key so React preserves the Task component instance across re-renders
             <TaskRow key={task._key ?? task._id ?? `task-${taskIndex}`} task={task} taskIndex={taskIndex} drag={drag} isActive={isActive} />
-           )}
-         />
+          )}
+        />
 
         {renderGroupsModal()}
+        {renderMoveTaskModal()}
       </KeyboardAvoidingView>
     </GestureHandlerRootView>
   );

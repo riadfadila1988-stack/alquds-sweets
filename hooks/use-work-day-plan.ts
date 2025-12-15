@@ -44,12 +44,34 @@ export function useWorkDayPlan(date?: string) {
     },
   });
 
+  const updateEmployeeTasksMutation = useMutation({
+    mutationFn: async ({ date, userId, tasks }: { date: string, userId: string, tasks: any[] }) => {
+      // We import updateEmployeeTasks inside implementation plan but here we need to import it or pass it.
+      // Ah, imports are at top. I need to add it to imports first? No, I can just use it if I update imports.
+      // But I cannot see imports in this chunk.
+      // I'll assume I need to update imports separately or use the existing import if it was *.*
+      // The file has: import { getWorkDayPlanByDate, createOrUpdateWorkDayPlan, updateUserTask } from '@/services/work-day-plan';
+      // So I need to update imports too.
+      // Let's do this sequentially or just use require? No, typescript.
+      // I will do multi-replace for this file to handle imports and the mutation.
+      return (await import('@/services/work-day-plan')).updateEmployeeTasks({ date, userId, tasks });
+    },
+    onSuccess: (updatedPlan) => {
+      if (updatedPlan) {
+        queryClient.setQueryData(['workDayPlan', effectiveDate], updatedPlan);
+      }
+      queryClient.invalidateQueries({ queryKey: ['workDayPlan'] });
+      queryClient.invalidateQueries({ queryKey: ['workDayPlans'] });
+    },
+  });
+
   return {
     plan,
     isLoading,
     error: error?.message,
     save: saveMutation.mutateAsync,
     updateTask: updateTaskMutation.mutateAsync,
+    updateEmployeeTasks: updateEmployeeTasksMutation.mutateAsync,
     refetch, // expose refetch so callers can trigger a manual refresh (used by work-status interval)
   };
 }

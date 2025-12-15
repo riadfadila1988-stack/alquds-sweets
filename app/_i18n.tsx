@@ -1,4 +1,4 @@
-import {createContext, useContext, useMemo, useState, ReactNode, createElement} from 'react';
+import { createContext, useContext, useMemo, useState, ReactNode, createElement } from 'react';
 
 // Minimal, local i18n implementation to avoid external dependency on react-i18next
 // Extend translations as needed.
@@ -174,6 +174,12 @@ const resources = {
         errorFetchingData: 'خطأ في جلب البيانات',
         remove: 'إزالة',
         newTaskGroup: 'مجموعة مهام جديدة',
+        duplicate: 'تكرار',
+        duplicateConfirm: 'هل تريد تكرار هذه المجموعة؟',
+        duplicateGroup: 'تكرار المجموعة',
+        enterNewName: 'أدخل اسمًا للمجموعة الجديدة',
+        duplicating: 'جاري التكرار...',
+        copy: 'نسخة',
         // New material group screen title
         newMaterialGroup: 'مجموعة مواد جديدة',
         planWorkDay: 'تخطيط يوم العمل',
@@ -202,6 +208,10 @@ const resources = {
         planSaved: 'تم حفظ الخطة',
         noResults: 'لا توجد نتائج',
         clear: 'إغلاقي',
+        // Move Task
+        dragToReorder: 'اسحب لإعادة الترتيب',
+        moveTaskTo: 'نقل المهمة إلى...',
+        moveTaskConfirmation: 'اختر موظفًا لتعيين هذه المهمة له:',
         // Welcome overlay
         welcomeBackMain: 'أهلاً بعودتك،',
         welcomeBackSub: 'هل أنت مستعد لجعل اليوم رائعًا؟ هيا بنا! 🎉',
@@ -470,6 +480,12 @@ const resources = {
         errorFetchingData: 'Error fetching data',
         remove: 'Remove',
         newTaskGroup: 'New Task Group',
+        duplicate: 'Duplicate',
+        duplicateConfirm: 'Duplicate this group?',
+        duplicateGroup: 'Duplicate Group',
+        enterNewName: 'Enter a name for the new group',
+        duplicating: 'Duplicating...',
+        copy: 'Copy',
         // New material group screen title
         newMaterialGroup: 'New Material Group',
         planWorkDay: 'Plan Work Day',
@@ -498,6 +514,10 @@ const resources = {
         planSaved: 'Plan saved',
         noResults: 'No results',
         clear: 'Clear',
+        // Move Task
+        dragToReorder: 'Drag to reorder',
+        moveTaskTo: 'Move Task To...',
+        moveTaskConfirmation: 'Select an employee to assign this task to:',
         // Welcome overlay
         welcomeBackMain: 'Welcome back,',
         welcomeBackSub: `Ready to make today awesome? Let's go! 🎉`,
@@ -578,7 +598,7 @@ type I18nContextValue = {
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
-export function I18nProvider({children, defaultLang = 'ar' as Lang}: { children: ReactNode; defaultLang?: Lang }) {
+export function I18nProvider({ children, defaultLang = 'ar' as Lang }: { children: ReactNode; defaultLang?: Lang }) {
     const [lang, setLang] = useState<Lang>(defaultLang);
     const value = useMemo<I18nContextValue>(() => ({
         lang,
@@ -586,7 +606,7 @@ export function I18nProvider({children, defaultLang = 'ar' as Lang}: { children:
         // Use any-indexing to lookup keys; fall back to the key string when missing.
         t: (key) => ((resources as any)[lang]?.[key] ?? String(key)) as string,
     }), [lang]);
-    return createElement(I18nContext.Provider, {value}, children as any);
+    return createElement(I18nContext.Provider, { value }, children as any);
 }
 
 export function useTranslation() {
@@ -608,6 +628,6 @@ export function setLanguage(lng: Lang) {
 // missing default export for this route file. Export a small wrapper component
 // that simply renders the I18nProvider so if the router mounts this file it
 // still provides i18n to its children.
-export default function I18nRoute({children}: { children?: ReactNode }) {
-    return createElement(I18nProvider, {children} as any);
+export default function I18nRoute({ children }: { children?: ReactNode }) {
+    return createElement(I18nProvider, { children } as any);
 }

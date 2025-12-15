@@ -3,18 +3,18 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { emitLogout } from './auth-events';
 
 const api = axios.create({
-    baseURL: 'https://alquds-sweets-server.onrender.com/api/v1',
+  baseURL: 'https://alquds-sweets-server.onrender.com/api/v1',
 });
 
 api.interceptors.request.use(async (config) => {
-    try {
-        const token = await AsyncStorage.getItem('@token');
-        if (token) {
-            config.headers = config.headers || {};
-            (config.headers as any)['Authorization'] = `Bearer ${token}`;
-        }
-    } catch {}
-    return config;
+  try {
+    const token = await AsyncStorage.getItem('@token');
+    if (token) {
+      config.headers = config.headers || {};
+      (config.headers as any)['Authorization'] = `Bearer ${token}`;
+    }
+  } catch { }
+  return config;
 });
 
 api.interceptors.response.use(
@@ -27,10 +27,10 @@ api.interceptors.response.use(
         try {
           await AsyncStorage.removeItem('@token');
           await AsyncStorage.removeItem('@user');
-        } catch {}
+        } catch { }
         emitLogout();
       }
-    } catch {}
+    } catch { }
     return Promise.reject(error);
   }
 );

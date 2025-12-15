@@ -35,6 +35,15 @@ export const updateUserTask = async (payload: {
   return data;
 };
 
+export const updateEmployeeTasks = async (payload: {
+  date: string;
+  userId: string;
+  tasks: any[];
+}) => {
+  const { data } = await api.post('/work-day-plans/update-employee-tasks', payload);
+  return data;
+};
+
 export const deleteWorkDayPlan = async (id: string) => {
   await api.delete(`/work-day-plans/${id}`);
 };
