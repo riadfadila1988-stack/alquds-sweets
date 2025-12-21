@@ -29,7 +29,6 @@ const TaskGroupForm = ({initialData, onSubmit}: TaskGroupFormProps) => {
     const {materials} = useMaterials();
     // refs for child Task components so we can flush their local state before submit (Android blurs may not fire)
     const taskRefs = useRef<Record<string, any>>({});
-    const autoSaveTimerRef = useRef<any>(null);
     // Track the last synced ID to only sync when switching task groups
     const lastSyncedIdRef = useRef<string | undefined>(initialData?._id);
     // Store latest task data in ref to avoid re-renders on field changes
@@ -161,19 +160,6 @@ const TaskGroupForm = ({initialData, onSubmit}: TaskGroupFormProps) => {
 
     const memoTasks = useMemo(() => tasks, [tasks]);
 
-    const renderListFooter = () => (
-        <View>
-            {/* If there are existing tasks, show the Add button after the list */}
-            {tasks.length > 0 && (
-                <View style={{marginTop: 12}}>
-
-                </View>
-            )}
-            {/* reduced spacer since no footer buttons */}
-            <View style={{height: 20}}/>
-        </View>
-    );
-
     // Small inner component for a task row to manage local press timer for starting drag
     function TaskRow({task, taskIndex, drag, isActive}: {
         task: any;
@@ -181,32 +167,26 @@ const TaskGroupForm = ({initialData, onSubmit}: TaskGroupFormProps) => {
         drag: () => void;
         isActive: boolean
     }) {
-        const pressTimer = useRef<any>(null);
-        const handlePressIn = () => {
-            // start timer to begin drag after 600ms
-            pressTimer.current = setTimeout(() => {
-                try {
-                    drag();
-                } catch {
+        // Use useEffect to cleanup on unmount
+        useEffect(() => {
+            return () => {
+                // Cleanup function - dismiss keyboard if this task was being dragged
+                if (isActive) {
+                    Keyboard.dismiss();
                 }
-                pressTimer.current = null;
-            }, 600);
-        };
-        const handlePressOut = () => {
-            if (pressTimer.current) {
-                clearTimeout(pressTimer.current);
-                pressTimer.current = null;
-            }
-        };
+            };
+        }, [isActive]);
 
         return (
             <View style={[styles.draggableTaskContainer, isActive && styles.draggableTaskActive]}>
                 <View style={{flexDirection: 'row', alignItems: 'center'}}>
                     <TouchableOpacity
                         style={[styles.dragHandle]}
-                        onPressIn={handlePressIn}
-                        onPressOut={handlePressOut}
-                        // hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+                        onLongPress={() => {
+                            Keyboard.dismiss();
+                            drag();
+                        }}
+                        delayLongPress={200}
                         accessibilityLabel={t('dragToReorder') || 'Drag to reorder'}
                     >
                         <MaterialIcons name="unfold-more" size={24} color="#999"/>
@@ -277,22 +257,20 @@ const TaskGroupForm = ({initialData, onSubmit}: TaskGroupFormProps) => {
                         data={memoTasks}
                         // enable smooth nested scrolling while dragging
                         nestedScrollEnabled
-                        activationDistance={20}
-                        dragItemOverflow
+                        activationDistance={5}
+                        dragItemOverflow={true}
                         onDragBegin={() => {
-                            Keyboard.dismiss(); /* optional debug */
+                            Keyboard.dismiss();
                         }}
                         onDragEnd={({data}) => {
                             setTasks(data);
                             tasksDataRef.current = data;
                             scheduleSubmit();
-                            Keyboard.dismiss();
                         }}
-                        onRelease={() => {
-                            Keyboard.dismiss();
+                        onPlaceholderIndexChange={() => {
+                            // Optional: Add haptic feedback here if desired
                         }}
                         keyExtractor={(item: any, index) => (item?._key ?? item?._id ?? `task-${index}`)}
-                        // ListFooterComponent={renderListFooter}
                         contentContainerStyle={styles.scrollContainer}
                         keyboardShouldPersistTaps="handled"
                         renderItem={({item: task, index: taskIndex, drag, isActive}: RenderItemParams<any>) => (
@@ -352,7 +330,15 @@ const styles = StyleSheet.create({
         elevation: 3
     },
     draggableTaskContainer: {flexDirection: 'column', alignItems: 'flex-start', marginTop: 20,},
-    draggableTaskActive: {opacity: 0.8, transform: [{scale: 1.02}]},
+    draggableTaskActive: {
+        opacity: 0.95,
+        transform: [{scale: 1.03}],
+        shadowColor: '#667eea',
+        shadowOffset: {width: 0, height: 8},
+        shadowOpacity: 0.4,
+        shadowRadius: 16,
+        elevation: 12,
+    },
     dragHandle: {width: 40, alignItems: 'center', justifyContent: 'flex-start'},
     dragHandleRtl: {paddingRight: 0, paddingLeft: 8},
     taskContent: {flex: 1},

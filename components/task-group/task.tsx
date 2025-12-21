@@ -439,7 +439,6 @@ const TaskInner = ({task, onChange, onRemove, materials}: TaskProps, ref: any) =
                         }
                     }}
                     editable
-                    selectTextOnFocus
                 />
 
                 {/* Compact row: Duration and Start At placed side-by-side for a cleaner layout */}
@@ -461,7 +460,6 @@ const TaskInner = ({task, onChange, onRemove, materials}: TaskProps, ref: any) =
                                 }
                             }}
                             editable
-                            selectTextOnFocus
                         />
                     </View>
 
@@ -571,7 +569,6 @@ const TaskInner = ({task, onChange, onRemove, materials}: TaskProps, ref: any) =
                         }
                     }}
                     editable
-                    selectTextOnFocus
                     multiline={true}
                     numberOfLines={4}
                     blurOnSubmit={false}
