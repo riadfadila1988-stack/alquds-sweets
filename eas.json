@@ -29,7 +29,8 @@
         "buildType": "apk"
       },
       "ios": {
-        "buildConfiguration": "Release"
+        "buildConfiguration": "Release",
+        "distribution": "store"
       }
     },
     "production-internal": {
